@@ -1,476 +1,1625 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>AO Heatmap Generator</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AO Heatmap Generator</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#101a30;
+      --text:#e8eefc;
+      --muted:#a9b6d6;
+      --line:#2a3a63;
 
-<style>
+      /* Level colors */
+      --l1:#a8e6a3; /* green */
+      --l2:#f7e49c; /* yellow */
+      --l3:#f5a3a3; /* red */
 
-body{
-font-family:Arial, Helvetica, sans-serif;
-background:#0f1b2d;
-color:#e5ecf5;
-margin:0;
-padding:30px;
-}
+      --blueRow:#183a7a;
+    }
 
-h2{
-margin-top:0;
-}
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(180deg, #071022 0%, #0b1220 60%, #060b17 100%);
+      color:var(--text);
+      padding:18px;
+    }
 
-.container{
-display:grid;
-grid-template-columns:1fr 1fr;
-gap:30px;
-}
+    h1{ margin:0 0 10px 0; font-size:22px; }
+    h2{ margin:0 0 10px 0; font-size:16px; color:var(--muted); font-weight:600; }
+    .row{ display:flex; gap:14px; flex-wrap:wrap; }
+    .card{
+      background: rgba(16,26,48,0.9);
+      border:1px solid rgba(42,58,99,0.8);
+      border-radius:14px;
+      padding:14px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+    }
+    .card.wide{ width:100%; }
+    .card.left{ flex: 1 1 420px; min-width:360px; }
+    .card.right{ flex: 1 1 520px; min-width:360px; }
 
-.panel{
-background:#13233a;
-padding:20px;
-border-radius:12px;
-}
+    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+    input, select, textarea{
+      width:100%;
+      background:#0b1430;
+      border:1px solid rgba(42,58,99,0.9);
+      color:var(--text);
+      border-radius:10px;
+      padding:10px 10px;
+      outline:none;
+    }
+    textarea{ min-height:64px; resize:vertical; }
 
-input,select{
-background:#0f1b2d;
-border:1px solid #2d4469;
-color:white;
-padding:6px;
-border-radius:6px;
-}
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .grid3{
+      display:grid;
+      grid-template-columns: 0.6fr 0.8fr 2fr;
+      gap:10px;
+      align-items:end;
+    }
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      align-items:end;
+    }
 
-button{
-background:#2b4c7e;
-color:white;
-border:none;
-padding:6px 10px;
-border-radius:6px;
-cursor:pointer;
-}
+    .btn{
+      background:#132044;
+      border:1px solid rgba(42,58,99,0.9);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:700;
+      user-select:none;
+    }
+    .btn:hover{ filter:brightness(1.08); }
+    .btn.primary{ background:#1c2f66; }
+    .btn.danger{ background:#4a1e2a; border-color:#7a2d3f; }
+    .btn.small{ padding:7px 10px; font-size:12px; border-radius:9px; }
+    .btn.pill{ border-radius:999px; padding:8px 12px; font-size:12px; }
 
-button:hover{
-background:#3d66a3;
-}
+    /* Level-colored buttons */
+    .btn.pill.lvl1{ background: var(--l1) !important; color:#111; }
+    .btn.pill.lvl2{ background: var(--l2) !important; color:#111; }
+    .btn.pill.lvl3{ background: var(--l3) !important; color:#111; }
 
-.tag{
-padding:6px 10px;
-border-radius:20px;
-display:inline-block;
-margin:3px;
-cursor:pointer;
-}
+    .inline{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .check{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:12px;
+      color:var(--muted);
+      user-select:none;
+    }
+    .check input{ width:auto; }
 
-.level1{background:#7ecf9a;color:#000;}
-.level2{background:#f1d277;color:#000;}
-.level3{background:#ef8a8a;color:#000;}
+    .muted{ color:var(--muted); font-size:12px; }
 
-.questionCard{
-border:2px solid #3e8c7a;
-border-radius:12px;
-padding:12px;
-margin-top:10px;
-display:flex;
-align-items:center;
-justify-content:space-between;
-}
+    table{ border-collapse:collapse; width:100%; }
+    th, td{
+      border:1px solid rgba(42,58,99,0.9);
+      padding:8px;
+      text-align:center;
+      font-size:12px;
+    }
+    th{
+      background:#0c1836;
+      font-weight:800;
+      color:var(--text);
+    }
+    td.desc{ text-align:left; min-width:260px; }
+    td.qnum{ width:48px; font-weight:900; }
 
-.questionInfo{
-display:flex;
-flex-direction:column;
-}
+    tr.hl td{ background: rgba(24,58,122,0.45); }
 
-.questionControls{
-display:flex;
-align-items:center;
-gap:12px;
-}
+    td.mark{
+      width:26px;
+      min-width:26px;
+      padding:0;
+      height:26px;
+      font-weight:900;
+      color:#111;
+    }
+    td.blank{
+      width:26px;
+      min-width:26px;
+      padding:0;
+      height:26px;
+      background: rgba(255,255,255,0.03);
+    }
 
-.partsList{
-margin-top:10px;
-font-size:14px;
-}
+    td.L1{ background: var(--l1); }
+    td.L2{ background: var(--l2); }
+    td.L3{ background: var(--l3); }
 
-.partRow{
-display:flex;
-align-items:center;
-gap:8px;
-margin-top:6px;
-}
+    .after-thick{ border-right:3px solid #000 !important; }
+    .after-dashed{ border-right:2px dashed #000 !important; }
 
-.subRow{
-margin-left:20px;
-display:flex;
-gap:8px;
-}
+    .previewStrip{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      padding:10px;
+      background: rgba(11,20,48,0.65);
+      border:1px solid rgba(42,58,99,0.8);
+      border-radius:12px;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:34px;
+      height:28px;
+      border-radius:8px;
+      font-weight:900;
+      color:#111;
+      border:1px solid rgba(0,0,0,0.25);
+      position:relative;
+    }
+    .chip.after-thick::after{
+      content:"";
+      position:absolute;
+      right:-4px;
+      top:2px;
+      bottom:2px;
+      width:3px;
+      background:#000;
+      border-radius:2px;
+    }
+    .chip.after-dashed::after{
+      content:"";
+      position:absolute;
+      right:-4px;
+      top:2px;
+      bottom:2px;
+      width:0;
+      border-right:2px dashed #000;
+    }
+    .chip.L1{ background: var(--l1); }
+    .chip.L2{ background: var(--l2); }
+    .chip.L3{ background: var(--l3); }
 
-.editor{
-min-height:300px;
-border:1px solid #2d4469;
-padding:10px;
-border-radius:10px;
-}
+    .segList{
+      margin-top:10px;
+      border-top:1px solid rgba(42,58,99,0.6);
+      padding-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .segRow{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      background: rgba(11,20,48,0.55);
+      border:1px solid rgba(42,58,99,0.7);
+      border-radius:12px;
+      padding:10px;
+    }
+    .segRow .left{
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .segRow .title{ font-weight:900; font-size:12px; }
+    .segRow .sub{ font-size:12px; color:var(--muted); }
 
-.previewRow{
-display:flex;
-}
+    .footerRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      padding:2px 6px;
+      border-radius:7px;
+      color:var(--text);
+      font-size:12px;
+    }
 
-.cell{
-width:26px;
-height:26px;
-display:flex;
-align-items:center;
-justify-content:center;
-border:1px solid #253a5c;
-font-size:12px;
-}
+    .hintBox{
+      background: rgba(11,20,48,0.55);
+      border:1px solid rgba(42,58,99,0.7);
+      border-radius:12px;
+      padding:10px;
+      color: var(--muted);
+      font-size:12px;
+      line-height:1.35;
+    }
 
-.thick{
-border-right:3px solid white;
-}
+    .warn{
+      background: rgba(74,30,42,0.35);
+      border:1px solid rgba(122,45,63,0.65);
+      color:#ffd0d8;
+      border-radius:12px;
+      padding:10px;
+      font-size:12px;
+      line-height:1.35;
+    }
 
-.dashed{
-border-right:2px dashed #bbb;
-}
+    .ok{
+      background: rgba(28,47,102,0.35);
+      border:1px solid rgba(42,58,99,0.65);
+      color:#d5e2ff;
+      border-radius:12px;
+      padding:10px;
+      font-size:12px;
+      line-height:1.35;
+    }
 
-</style>
+    /* draft part list rows */
+    .draftListRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px;
+      border:1px solid rgba(42,58,99,0.7);
+      border-radius:12px;
+      background: rgba(11,20,48,0.45);
+    }
+    .draftListRow .meta{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .draftListRow .meta .top{
+      font-weight:900;
+      font-size:12px;
+    }
+    .draftListRow .meta .bot{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .draftListRow .actions{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+  </style>
 </head>
-
 <body>
+  <h1>AO Heatmap Generator</h1>
+  <div class="muted">Build question structure first (parts/subparts) → editor follows the structure to tag marks. Colors = level (L1 green, L2 yellow, L3 red).</div>
 
-<div class="container">
+  <div class="row" style="margin-top:14px;">
+    <div class="card left">
+      <h2>Paper setup</h2>
+      <div class="grid">
+        <div>
+          <label>Paper title</label>
+          <input id="paperTitle" placeholder="e.g., AA SL Paper 1 (May 2026)" />
+        </div>
+        <div>
+          <label>Total marks (paper)</label>
+          <input id="paperTotal" type="number" min="0" value="0"/>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <label>Note</label>
+        <input id="paperNote" placeholder="e.g., Questions highlighted in blue are common with HL" />
+      </div>
 
-<div class="panel">
+      <div class="segList" style="margin-top:14px;">
+        <h2 style="margin:0;">Add a question</h2>
 
-<h2>Paper setup</h2>
+        <div class="grid3">
+          <div>
+            <label>Q#</label>
+            <input id="qNum" type="number" min="1" placeholder="1" />
+          </div>
+          <div>
+            <label># of marks</label>
+            <input id="qMarks" type="number" min="1" placeholder="e.g., 12" />
+          </div>
+          <div>
+            <label>Brief description</label>
+            <input id="qDesc" placeholder="e.g., Composite functions" />
+          </div>
+        </div>
 
-<input id="paperTitle" placeholder="Paper title" style="width:70%">
-<input id="paperMarks" type="number" placeholder="Total marks" style="width:120px">
+        <div class="inline" style="justify-content:flex-end; margin-top:10px;">
+          <button class="btn primary" id="addQuestionBtn">Add question</button>
+        </div>
 
-<hr>
+        <label class="check" style="margin-top:8px;">
+          <input id="qNoParts" type="checkbox" />
+          This question does not have parts
+        </label>
 
-<h3>Add a question</h3>
+        <div id="partsBuilder" style="margin-top:10px;">
+          <div class="hintBox">
+            Build the question structure here. You can edit it freely until you click “Add question”.
+          </div>
 
-Q#
-<input id="qNum" type="number" style="width:60px">
+          <div style="margin-top:10px;">
+            <div class="grid2">
+              <div>
+                <label>Question part</label>
+                <select id="partLabel"></select>
+              </div>
+              <div>
+                <label>Marks for this part</label>
+                <select id="partMarks"></select>
+              </div>
+            </div>
 
-# of marks
-<input id="qMarks" type="number" style="width:80px">
+            <label class="check" style="margin-top:10px;">
+              <input id="partHasSubparts" type="checkbox" />
+              This part is broken into subparts
+            </label>
 
-Brief description
-<input id="qDesc" style="width:220px">
+            <div id="subpartsBuilder" style="margin-top:10px; display:none;">
+              <div id="subpartsContainer"></div>
 
-<br><br>
+              <label class="check" style="margin-top:10px;">
+                <input id="nextSubpart" type="checkbox" />
+                Next subpart
+              </label>
 
-<label>
-<input type="checkbox" id="noParts">
-This question does not have parts
-</label>
+              <div class="muted" style="margin-top:6px;">
+                Subpart labels are limited to (i)–(v) and already-used labels are removed from new dropdowns.
+              </div>
+            </div>
 
-<div id="structureBuilder">
+            <div class="inline" style="margin-top:12px; justify-content:space-between;">
+              <div class="inline" style="gap:8px;">
+                <button class="btn small" id="addOrSavePartBtn">Add this part to draft</button>
+                <button class="btn small" id="cancelEditPartBtn" style="display:none;">Cancel edit</button>
+              </div>
+              <button class="btn small danger" id="clearPartsBtn">Clear parts</button>
+            </div>
 
-<div class="partRow">
+            <div id="partsStatus" style="margin-top:10px;"></div>
 
-<select id="partLetter">
-<option>(a)</option>
-<option>(b)</option>
-<option>(c)</option>
-<option>(d)</option>
-<option>(e)</option>
-<option>(f)</option>
-<option>(g)</option>
-<option>(h)</option>
-</select>
+            <div class="segList" style="margin-top:12px;">
+              <div class="muted">Draft parts/subparts (editable):</div>
+              <div id="partsPreview" class="hintBox">None yet.</div>
 
-<select id="partMarks">
-<option>1</option>
-<option>2</option>
-<option>3</option>
-<option>4</option>
-<option>5</option>
-<option>6</option>
-<option>7</option>
-<option>8</option>
-<option>9</option>
-<option>10</option>
-</select>
+              <div id="draftPartsList" style="display:flex; flex-direction:column; gap:8px; margin-top:10px;"></div>
+            </div>
+          </div>
+        </div>
 
-<label>
-<input type="checkbox" id="hasSubparts">
-This part is broken into subparts
-</label>
+        <div class="muted" style="margin-top:10px;">
+          Tip: click a question below to edit its AO tags.
+        </div>
 
-<button onclick="addDraftPart()">Add this part</button>
+        <div id="questionList" class="segList"></div>
+      </div>
 
-</div>
+      <div class="segList">
+        <h2 style="margin:0;">Data controls</h2>
+        <div class="inline">
+          <button class="btn small" id="exportBtn">Export JSON</button>
+          <button class="btn small" id="importBtn">Import JSON</button>
+          <input id="importFile" type="file" accept="application/json" style="display:none;" />
+          <button class="btn small danger" id="resetBtn">Reset (clear everything)</button>
+        </div>
+      </div>
+    </div>
 
-</div>
+    <div class="card right">
+      <h2>Editor</h2>
 
-<div id="draftParts" class="partsList"></div>
+      <div id="editorEmpty" class="muted">
+        Select a question on the left to tag marks.
+      </div>
 
-<br>
+      <div id="editor" style="display:none;">
+        <div class="inline" style="justify-content:space-between;">
+          <div>
+            <div style="font-weight:900; font-size:14px;" id="editTitle"></div>
+            <div class="muted" id="editSub"></div>
+          </div>
+          <button class="btn small danger" id="deleteQuestionBtn">Delete question</button>
+        </div>
 
-<button onclick="addQuestion()">Add question</button>
+        <div style="margin-top:12px;" class="hintBox" id="structureHint"></div>
 
-<hr>
+        <div class="segList">
+          <h2 style="margin:0;">Tag marks</h2>
 
-<div id="questions"></div>
+          <div class="muted">
+            Current segment: <span class="kbd" id="currentSeg">—</span>
+            &nbsp; Remaining in segment: <span class="kbd" id="remaining">—</span>
+          </div>
 
-</div>
+          <div class="inline" style="margin-top:10px; gap:8px;">
+            <button class="btn pill lvl1" data-ao="S" data-level="1">S1</button>
+            <button class="btn pill lvl2" data-ao="S" data-level="2">S2</button>
+            <button class="btn pill lvl3" data-ao="S" data-level="3">S3</button>
 
-<div class="panel">
+            <button class="btn pill lvl1" data-ao="U" data-level="1">U1</button>
+            <button class="btn pill lvl2" data-ao="U" data-level="2">U2</button>
+            <button class="btn pill lvl3" data-ao="U" data-level="3">U3</button>
 
-<h2>Editor</h2>
+            <button class="btn pill lvl1" data-ao="I" data-level="1">I1</button>
+            <button class="btn pill lvl2" data-ao="I" data-level="2">I2</button>
+            <button class="btn pill lvl3" data-ao="I" data-level="3">I3</button>
 
-<div id="editor" class="editor"></div>
+            <button class="btn small" id="undoBtn">Undo</button>
+          </div>
 
-</div>
+          <div class="muted" style="margin-top:10px;">
+            Optional keyboard speed-up: <span class="kbd">S</span>/<span class="kbd">U</span>/<span class="kbd">I</span> then <span class="kbd">1</span>/<span class="kbd">2</span>/<span class="kbd">3</span>.
+          </div>
 
-</div>
+          <div style="margin-top:10px;">
+            <div class="muted">Preview (current question marks)</div>
+            <div class="previewStrip" id="previewStrip"></div>
+          </div>
+
+          <div class="segList">
+            <div class="muted">Segments (auto-built from your structure):</div>
+            <div id="segmentPlanList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <div class="footerRow">
+        <div>
+          <h2 style="margin:0 0 6px 0;">Heat map</h2>
+          <div class="muted" id="paperMeta">—</div>
+        </div>
+        <div class="inline">
+          <button class="btn small" id="printBtn">Print / Save as PDF</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px; overflow:auto;">
+        <table id="heatTable"></table>
+      </div>
+
+      <div style="margin-top:18px;">
+        <h2>AO Matrix</h2>
+        <div style="overflow:auto;">
+          <table id="matrixTable"></table>
+        </div>
+      </div>
+    </div>
+  </div>
 
 <script>
+const LS_KEY = "ao_heatmap_v2";
 
-let questions=[]
-let draftParts=[]
-let editingIndex=null
-let tags=[]
+let state = loadState() ?? {
+  paper: { title:"", totalMarks:0, note:"" },
+  questions: [],
+  selectedQIndex: null,
+  kbdAO: null,
+  draft: {
+    parts: [],
+    editingPartIndex: null
+  }
+};
 
-function addDraftPart(){
+const el = (id) => document.getElementById(id);
 
-let letter=document.getElementById("partLetter").value
-let marks=parseInt(document.getElementById("partMarks").value)
-let hasSub=document.getElementById("hasSubparts").checked
-
-draftParts.push({
-letter,
-marks,
-subparts:hasSub?[]:null
-})
-
-renderDraftParts()
-
+function saveState(){
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    paper: state.paper,
+    questions: state.questions
+  }));
 }
 
-function renderDraftParts(){
-
-let box=document.getElementById("draftParts")
-box.innerHTML=""
-
-draftParts.forEach((p,i)=>{
-
-let div=document.createElement("div")
-div.className="partRow"
-
-div.innerHTML=`
-${p.letter} (${p.marks} marks)
-
-<button onclick="editPart(${i})">Edit</button>
-<button onclick="deletePart(${i})">Remove</button>
-`
-
-box.appendChild(div)
-
-})
-
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    parsed.questions = parsed.questions ?? [];
+    parsed.paper = parsed.paper ?? { title:"", totalMarks:0, note:"" };
+    parsed.questions.forEach(q=>{
+      q.marks = q.marks ?? [];
+      q.segmentPlan = q.segmentPlan ?? [];
+      q.structure = q.structure ?? { noParts:true, parts:[] };
+      q.highlight = !!q.highlight;
+    });
+    return {
+      paper: parsed.paper,
+      questions: parsed.questions,
+      selectedQIndex: null,
+      kbdAO: null,
+      draft: { parts: [], editingPartIndex: null }
+    };
+  }catch(e){
+    console.warn("Failed to load state:", e);
+    return null;
+  }
 }
 
-function deletePart(i){
+/** helpers */
+function maxMarks(){
+  return Math.max(0, ...state.questions.map(q=>q.marks.length));
+}
+function paperTotalTagged(){
+  return state.questions.reduce((acc,q)=>acc + (q.marks?.length ?? 0), 0);
+}
+function aoCounts(){
+  const counts = {
+    S: {1:0,2:0,3:0, total:0},
+    U: {1:0,2:0,3:0, total:0},
+    I: {1:0,2:0,3:0, total:0},
+    total: {1:0,2:0,3:0, total:0}
+  };
+  for(const q of state.questions){
+    for(const m of (q.marks ?? [])){
+      counts[m.ao][m.level] += 1;
+      counts[m.ao].total += 1;
+      counts.total[m.level] += 1;
+      counts.total.total += 1;
+    }
+  }
+  return counts;
+}
+function pct(n, d){
+  if(!d) return "0%";
+  return Math.round((n/d)*100) + "%";
+}
+function boundaryClass(boundaryAfter){
+  if(boundaryAfter === "thick") return "after-thick";
+  if(boundaryAfter === "dashed") return "after-dashed";
+  return "";
+}
+function requireSelectedQuestion(){
+  const idx = state.selectedQIndex;
+  if(idx === null || idx < 0 || idx >= state.questions.length) return null;
+  return state.questions[idx];
+}
+function romanLabelOptions(){ return ["i","ii","iii","iv","v"]; }
+function partLabelOptions(){ return ["a","b","c","d","e","f","g","h"]; }
 
-draftParts.splice(i,1)
-renderDraftParts()
+function buildSegmentPlan(q){
+  const plan = [];
+  const noParts = !!q.structure?.noParts;
 
+  if(noParts){
+    plan.push({ label: "", marksCount: q.qMarks, dividerAfter: "thick" });
+    return plan;
+  }
+
+  const parts = q.structure?.parts ?? [];
+  for(const p of parts){
+    if(!p.hasSubparts){
+      plan.push({ label: p.label, marksCount: p.marks, dividerAfter: "thick" });
+    }else{
+      const subs = p.subparts ?? [];
+      subs.forEach((sp, idx)=>{
+        const isLast = idx === subs.length - 1;
+        plan.push({
+          label: `${p.label}(${sp.label})`,
+          marksCount: sp.marks,
+          dividerAfter: isLast ? "thick" : "dashed"
+        });
+      });
+    }
+  }
+  return plan;
 }
 
-function editPart(i){
-
-let p=draftParts[i]
-
-document.getElementById("partLetter").value=p.letter
-document.getElementById("partMarks").value=p.marks
-
-draftParts.splice(i,1)
-
-renderDraftParts()
-
+function totalMarksFromStructure(struct){
+  if(struct.noParts) return null;
+  let sum = 0;
+  for(const p of (struct.parts ?? [])){
+    if(!p.hasSubparts){
+      sum += Number(p.marks || 0);
+    }else{
+      sum += (p.subparts ?? []).reduce((a,s)=>a + Number(s.marks||0), 0);
+    }
+  }
+  return sum;
 }
 
-function addQuestion(){
+/** dropdown init */
+function initDropdowns(){
+  const partSel = el("partLabel");
+  partSel.innerHTML = "";
+  partLabelOptions().forEach(l=>{
+    const opt = document.createElement("option");
+    opt.value = l;
+    opt.textContent = `(${l})`;
+    partSel.appendChild(opt);
+  });
 
-let qNum=document.getElementById("qNum").value
-let marks=parseInt(document.getElementById("qMarks").value)
-let desc=document.getElementById("qDesc").value
+  const pm = el("partMarks");
+  pm.innerHTML = "";
+  for(let i=1;i<=10;i++){
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = String(i);
+    pm.appendChild(opt);
+  }
 
-let noParts=document.getElementById("noParts").checked
-
-let structure=[]
-
-if(noParts){
-
-structure.push({
-marks,
-divider:"thick"
-})
-
-}else{
-
-draftParts.forEach(p=>{
-structure.push({
-marks:p.marks,
-divider:"thick"
-})
-})
-
+  rebuildSubpartsUI([]);
 }
 
-questions.push({
-qNum,
-marks,
-desc,
-structure,
-common:false,
-tags:[]
-})
+function rebuildSubpartsUI(existing){
+  const container = el("subpartsContainer");
+  container.innerHTML = "";
 
-draftParts=[]
-renderDraftParts()
+  if(existing.length === 0){
+    container.appendChild(makeSubpartRow(0, "i", 1));
+    return;
+  }
 
-renderQuestions()
+  existing.forEach((sp, idx)=>{
+    container.appendChild(makeSubpartRow(idx, sp.label, sp.marks));
+  });
 
+  normalizeSubpartDropdownOptions();
 }
 
-function renderQuestions(){
+function makeSubpartRow(index, label, marks){
+  const row = document.createElement("div");
+  row.className = "grid2";
+  row.style.marginTop = index === 0 ? "0px" : "10px";
 
-let box=document.getElementById("questions")
-box.innerHTML=""
+  const left = document.createElement("div");
+  const right = document.createElement("div");
 
-questions.forEach((q,i)=>{
+  const lab = document.createElement("label");
+  lab.textContent = "Subpart";
+  left.appendChild(lab);
 
-let div=document.createElement("div")
-div.className="questionCard"
+  const sel = document.createElement("select");
+  sel.dataset.subIndex = String(index);
 
-let info=document.createElement("div")
-info.className="questionInfo"
+  romanLabelOptions().forEach(r=>{
+    const opt = document.createElement("option");
+    opt.value = r;
+    opt.textContent = `(${r})`;
+    sel.appendChild(opt);
+  });
+  sel.value = label;
+  left.appendChild(sel);
 
-info.innerHTML=`
-<b>Q${q.qNum} — ${q.desc}</b>
-${q.tags.length} tagged / ${q.marks} total
-`
+  const lab2 = document.createElement("label");
+  lab2.textContent = "Marks for this subpart";
+  right.appendChild(lab2);
 
-let controls=document.createElement("div")
-controls.className="questionControls"
+  const sel2 = document.createElement("select");
+  sel2.dataset.subMarksIndex = String(index); // becomes data-sub-marks-index
+  for(let i=1;i<=10;i++){
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = String(i);
+    sel2.appendChild(opt);
+  }
+  sel2.value = String(marks);
+  right.appendChild(sel2);
 
-let checkbox=document.createElement("input")
-checkbox.type="checkbox"
-checkbox.checked=q.common
-checkbox.onchange=()=>{q.common=checkbox.checked}
+  row.appendChild(left);
+  row.appendChild(right);
 
-let label=document.createElement("label")
-label.innerText="Highlight as common question"
-
-let editBtn=document.createElement("button")
-editBtn.innerText="Edit"
-editBtn.onclick=()=>editQuestion(i)
-
-controls.appendChild(checkbox)
-controls.appendChild(label)
-controls.appendChild(editBtn)
-
-div.appendChild(info)
-div.appendChild(controls)
-
-box.appendChild(div)
-
-})
-
+  return row;
 }
 
-function editQuestion(i){
+function getSubpartsFromUI(){
+  const container = el("subpartsContainer");
+  const subSelects = Array.from(container.querySelectorAll("select[data-sub-index]"));
+  const subMarkSelects = Array.from(container.querySelectorAll("select[data-sub-marks-index]"));
 
-editingIndex=i
-tags=[]
-renderEditor()
+  const subs = [];
+  for(let i=0;i<subSelects.length;i++){
+    subs.push({
+      label: subSelects[i].value,
+      marks: Number(subMarkSelects[i].value)
+    });
+  }
+  return subs;
+}
 
+function addNextSubpartRow(){
+  const container = el("subpartsContainer");
+  const existing = getSubpartsFromUI();
+  const used = new Set(existing.map(x=>x.label));
+  const remaining = romanLabelOptions().filter(x=>!used.has(x));
+
+  if(remaining.length === 0){
+    alert("Maximum subparts reached (i)–(v).");
+    el("nextSubpart").checked = false;
+    return;
+  }
+
+  const idx = existing.length;
+  container.appendChild(makeSubpartRow(idx, remaining[0], 1));
+  el("nextSubpart").checked = false;
+
+  normalizeSubpartDropdownOptions();
+}
+
+function normalizeSubpartDropdownOptions(){
+  const container = el("subpartsContainer");
+  const subSelects = Array.from(container.querySelectorAll("select[data-sub-index]"));
+
+  const current = subSelects.map(s=>s.value);
+  const used = new Set(current);
+
+  subSelects.forEach((sel)=>{
+    const keep = sel.value;
+    sel.innerHTML = "";
+    romanLabelOptions().forEach(r=>{
+      if(used.has(r) && r !== keep) return;
+      const opt = document.createElement("option");
+      opt.value = r;
+      opt.textContent = `(${r})`;
+      sel.appendChild(opt);
+    });
+    sel.value = keep;
+  });
+}
+
+/** render */
+function renderAll(){
+  el("paperTitle").value = state.paper.title ?? "";
+  el("paperTotal").value = state.paper.totalMarks ?? 0;
+  el("paperNote").value = state.paper.note ?? "";
+
+  el("partsBuilder").style.display = el("qNoParts").checked ? "none" : "block";
+  el("subpartsBuilder").style.display = el("partHasSubparts").checked ? "block" : "none";
+
+  renderDraftPartsPreviewAndList();
+  renderQuestionList();
+  renderEditor();
+  renderHeatTable();
+  renderMatrixTable();
+
+  const totalTagged = paperTotalTagged();
+  const totalPaper = Number(state.paper.totalMarks || 0);
+  el("paperMeta").textContent =
+    `${state.paper.title || "Untitled paper"} — tagged marks: ${totalTagged}` +
+    (totalPaper ? ` / paper total: ${totalPaper}` : "") +
+    (state.paper.note ? ` • Note: ${state.paper.note}` : "");
+}
+
+function renderQuestionList(){
+  const wrap = el("questionList");
+  wrap.innerHTML = "";
+
+  if(state.questions.length === 0){
+    const d = document.createElement("div");
+    d.className = "muted";
+    d.textContent = "No questions yet.";
+    wrap.appendChild(d);
+    return;
+  }
+
+  state.questions
+    .slice()
+    .sort((a,b)=>a.qNum - b.qNum)
+    .forEach((q) => {
+      const idx = state.questions.indexOf(q);
+
+      const row = document.createElement("div");
+      row.className = "segRow";
+      row.style.cursor = "pointer";
+      if(idx === state.selectedQIndex){
+        row.style.outline = "2px solid rgba(168,230,163,0.5)";
+      }
+
+      const left = document.createElement("div");
+      left.className = "left";
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = `Q${q.qNum} — ${q.desc || "(no description)"}`;
+      const sub = document.createElement("div");
+      sub.className = "sub";
+      sub.textContent =
+        `${q.marks.length} tagged / ${q.qMarks} total • ${q.segmentPlan.length} segments` +
+        (q.highlight ? " • common" : "");
+      left.appendChild(title);
+      left.appendChild(sub);
+
+      const controls = document.createElement("div");
+      controls.className = "inline";
+      controls.style.gap = "10px";
+
+      // NEW: checkbox moved here
+      const cbWrap = document.createElement("label");
+      cbWrap.className = "check";
+      cbWrap.style.margin = "0";
+      cbWrap.style.whiteSpace = "nowrap";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !!q.highlight;
+      cb.addEventListener("click", (e)=> e.stopPropagation());
+      cb.addEventListener("change", ()=>{
+        q.highlight = cb.checked;
+        saveState();
+        renderAll();
+      });
+
+      const cbText = document.createElement("span");
+      cbText.textContent = "Highlight as common question";
+
+      cbWrap.appendChild(cb);
+      cbWrap.appendChild(cbText);
+
+      const btn = document.createElement("button");
+      btn.className = "btn small";
+      btn.textContent = "Edit";
+      btn.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        state.selectedQIndex = idx;
+        saveState();
+        renderAll();
+      });
+
+      controls.appendChild(cbWrap);
+      controls.appendChild(btn);
+
+      row.appendChild(left);
+      row.appendChild(controls);
+
+      row.addEventListener("click", ()=>{
+        state.selectedQIndex = idx;
+        saveState();
+        renderAll();
+      });
+
+      wrap.appendChild(row);
+    });
 }
 
 function renderEditor(){
+  const q = requireSelectedQuestion();
+  if(!q){
+    el("editorEmpty").style.display = "block";
+    el("editor").style.display = "none";
+    return;
+  }
+  el("editorEmpty").style.display = "none";
+  el("editor").style.display = "block";
 
-let editor=document.getElementById("editor")
-editor.innerHTML=""
+  el("editTitle").textContent = `Editing Q${q.qNum}`;
+  el("editSub").textContent = q.desc || "";
 
-if(editingIndex===null)return
+  const tagged = q.marks.length;
+  let segIndex = 0;
+  let offset = 0;
+  while(segIndex < q.segmentPlan.length){
+    const seg = q.segmentPlan[segIndex];
+    if(tagged < offset + seg.marksCount) break;
+    offset += seg.marksCount;
+    segIndex += 1;
+  }
 
-let q=questions[editingIndex]
+  if(segIndex >= q.segmentPlan.length){
+    el("currentSeg").textContent = "Done";
+    el("remaining").textContent = "0";
+  }else{
+    const seg = q.segmentPlan[segIndex];
+    const usedInSeg = tagged - offset;
+    const remaining = seg.marksCount - usedInSeg;
+    el("currentSeg").textContent = seg.label ? seg.label : "(no parts)";
+    el("remaining").textContent = String(remaining);
+  }
 
-let row=document.createElement("div")
-row.className="previewRow"
+  const structureText = q.structure?.noParts
+    ? "Structure: no parts (single block)."
+    : "Structure: " + q.segmentPlan.map(s=>`${s.label || "(no parts)"}: ${s.marksCount}`).join(" • ");
+  el("structureHint").textContent = structureText;
 
-let markCount=0
+  const strip = el("previewStrip");
+  strip.innerHTML = "";
+  if(q.marks.length === 0){
+    const d = document.createElement("div");
+    d.className = "muted";
+    d.textContent = "No marks tagged yet.";
+    strip.appendChild(d);
+  }else{
+    q.marks.forEach((m)=>{
+      const c = document.createElement("div");
+      c.className = `chip L${m.level} ${boundaryClass(m.boundaryAfter)}`;
+      c.textContent = m.ao + m.level;
+      strip.appendChild(c);
+    });
+  }
 
-q.structure.forEach(seg=>{
+  const spl = el("segmentPlanList");
+  spl.innerHTML = "";
+  q.segmentPlan.forEach((s, i)=>{
+    const row = document.createElement("div");
+    row.className = "segRow";
+    const left = document.createElement("div");
+    left.className = "left";
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = `${s.label || "(no parts)"} — ${s.marksCount} marks`;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = `Divider after: ${s.dividerAfter}`;
+    left.appendChild(title);
+    left.appendChild(sub);
 
-for(let i=0;i<seg.marks;i++){
+    const right = document.createElement("div");
+    right.className = "muted";
+    let start = 0;
+    for(let j=0;j<i;j++) start += q.segmentPlan[j].marksCount;
+    const end = start + s.marksCount;
+    right.textContent = q.marks.length >= end ? "✅ complete" : (q.marks.length >= start ? "➡ in progress" : "");
 
-let cell=document.createElement("div")
-cell.className="cell"
-cell.innerText=""
-
-cell.onclick=()=>tagCell(markCount)
-
-row.appendChild(cell)
-
-markCount++
-
+    row.appendChild(left);
+    row.appendChild(right);
+    spl.appendChild(row);
+  });
 }
 
-row.lastChild.classList.add(seg.divider)
+function renderHeatTable(){
+  const t = el("heatTable");
+  t.innerHTML = "";
 
-})
+  const mm = maxMarks();
 
-editor.appendChild(row)
+  const trh = document.createElement("tr");
+  ["Q#", "Brief Description"].forEach((h)=>{
+    const th = document.createElement("th");
+    th.textContent = h;
+    trh.appendChild(th);
+  });
+  const thMarks = document.createElement("th");
+  thMarks.colSpan = Math.max(1, mm);
+  thMarks.textContent = "AO Type and Level";
+  trh.appendChild(thMarks);
+  t.appendChild(trh);
 
-renderTags()
+  const sorted = state.questions.slice().sort((a,b)=>a.qNum-b.qNum);
+  for(const q of sorted){
+    const tr = document.createElement("tr");
+    if(q.highlight) tr.classList.add("hl");
 
+    const tdQ = document.createElement("td");
+    tdQ.className = "qnum";
+    tdQ.textContent = q.qNum;
+    tr.appendChild(tdQ);
+
+    const tdD = document.createElement("td");
+    tdD.className = "desc";
+    tdD.textContent = q.desc || "";
+    tr.appendChild(tdD);
+
+    const marks = q.marks ?? [];
+    for(let i=0; i<mm; i++){
+      if(i < marks.length){
+        const m = marks[i];
+        const td = document.createElement("td");
+        td.className = `mark L${m.level} ${boundaryClass(m.boundaryAfter)}`;
+        td.title = `${m.ao}${m.level}`;
+        td.textContent = m.ao;
+        tr.appendChild(td);
+      }else{
+        const td = document.createElement("td");
+        td.className = "blank";
+        tr.appendChild(td);
+      }
+    }
+    t.appendChild(tr);
+  }
+
+  if(sorted.length === 0){
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2 + Math.max(1, mm);
+    td.className = "muted";
+    td.style.padding = "16px";
+    td.textContent = "Add questions on the left to generate a heatmap.";
+    tr.appendChild(td);
+    t.appendChild(tr);
+  }
 }
 
-function renderTags(){
+function renderMatrixTable(){
+  const t = el("matrixTable");
+  t.innerHTML = "";
 
-let editor=document.getElementById("editor")
+  const counts = aoCounts();
+  const total = counts.total.total;
 
-let tagRow=document.createElement("div")
+  const header = document.createElement("tr");
+  ["", "Level 1", "Level 2", "Level 3", "Total", "% within tagged"].forEach(h=>{
+    const th = document.createElement("th");
+    th.textContent = h;
+    header.appendChild(th);
+  });
+  t.appendChild(header);
 
-tagRow.innerHTML=`
-<span class="tag level1" onclick="tag('S1')">S1</span>
-<span class="tag level2" onclick="tag('S2')">S2</span>
-<span class="tag level3" onclick="tag('S3')">S3</span>
-<span class="tag level1" onclick="tag('U1')">U1</span>
-<span class="tag level2" onclick="tag('U2')">U2</span>
-<span class="tag level3" onclick="tag('U3')">U3</span>
-<span class="tag level1" onclick="tag('I1')">I1</span>
-<span class="tag level2" onclick="tag('I2')">I2</span>
-<span class="tag level3" onclick="tag('I3')">I3</span>
-`
+  const rows = [
+    ["Select (S)", "S"],
+    ["Use (U)", "U"],
+    ["Interpret (I)", "I"]
+  ];
 
-editor.appendChild(tagRow)
+  rows.forEach(([label, key])=>{
+    const tr = document.createElement("tr");
+    const td0 = document.createElement("td");
+    td0.style.textAlign = "left";
+    td0.style.fontWeight = "900";
+    td0.textContent = label;
+    tr.appendChild(td0);
 
+    [1,2,3].forEach(lvl=>{
+      const td = document.createElement("td");
+      td.textContent = counts[key][lvl];
+      tr.appendChild(td);
+    });
+
+    const tdT = document.createElement("td");
+    tdT.style.fontWeight = "900";
+    tdT.textContent = counts[key].total;
+    tr.appendChild(tdT);
+
+    const tdP = document.createElement("td");
+    tdP.textContent = pct(counts[key].total, total);
+    tr.appendChild(tdP);
+
+    t.appendChild(tr);
+  });
+
+  const trTot = document.createElement("tr");
+  const tdLabel = document.createElement("td");
+  tdLabel.style.textAlign = "left";
+  tdLabel.style.fontWeight = "900";
+  tdLabel.textContent = "Total";
+  trTot.appendChild(tdLabel);
+
+  [1,2,3].forEach(lvl=>{
+    const td = document.createElement("td");
+    td.style.fontWeight = "900";
+    td.textContent = counts.total[lvl];
+    trTot.appendChild(td);
+  });
+
+  const tdAll = document.createElement("td");
+  tdAll.style.fontWeight = "900";
+  tdAll.textContent = counts.total.total;
+  trTot.appendChild(tdAll);
+
+  const tdPct = document.createElement("td");
+  tdPct.textContent = "100%";
+  trTot.appendChild(tdPct);
+
+  t.appendChild(trTot);
+
+  const totalPaper = Number(state.paper.totalMarks || 0);
+  const trNote = document.createElement("tr");
+  const tdNote = document.createElement("td");
+  tdNote.colSpan = 6;
+  tdNote.style.textAlign = "left";
+  tdNote.style.fontSize = "12px";
+  tdNote.style.color = "var(--muted)";
+  tdNote.style.padding = "10px";
+  if(totalPaper){
+    tdNote.textContent = `${counts.total.total} marks tagged (${pct(counts.total.total, totalPaper)}) compared with paper total (${totalPaper}).`;
+  }else{
+    tdNote.textContent = `Set "Total marks (paper)" to get the exam-percentage comparison.`;
+  }
+  trNote.appendChild(tdNote);
+  t.appendChild(trNote);
 }
 
-function tag(label){
+/** Draft part editing UI */
+function renderDraftPartsPreviewAndList(){
+  const box = el("partsPreview");
+  const list = el("draftPartsList");
+  list.innerHTML = "";
 
-tags.push(label)
+  const qMarks = Number(el("qMarks").value || 0);
 
+  if(state.draft.parts.length === 0){
+    box.textContent = "None yet.";
+  }else{
+    const lines = [];
+    for(const p of state.draft.parts){
+      if(!p.hasSubparts){
+        lines.push(`(${p.label}) — ${p.marks}`);
+      }else{
+        const subs = p.subparts.map(sp=>`(${sp.label}) ${sp.marks}`).join(", ");
+        const sum = p.subparts.reduce((a,s)=>a+s.marks,0);
+        lines.push(`(${p.label}) — subparts: ${subs}  [sum ${sum}]`);
+      }
+    }
+    box.textContent = lines.join(" • ");
+  }
+
+  // list with edit/remove
+  state.draft.parts.forEach((p, idx)=>{
+    const row = document.createElement("div");
+    row.className = "draftListRow";
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+
+    const top = document.createElement("div");
+    top.className = "top";
+    top.textContent = `(${p.label})`;
+
+    const bot = document.createElement("div");
+    bot.className = "bot";
+    if(!p.hasSubparts){
+      bot.textContent = `${p.marks} marks`;
+    }else{
+      const sum = (p.subparts ?? []).reduce((a,s)=>a+Number(s.marks||0), 0);
+      bot.textContent = `subparts (${(p.subparts ?? []).length}) • ${sum} marks`;
+    }
+
+    meta.appendChild(top);
+    meta.appendChild(bot);
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const edit = document.createElement("button");
+    edit.className = "btn small";
+    edit.textContent = "Edit";
+    edit.addEventListener("click", ()=>{
+      loadDraftPartForEditing(idx);
+    });
+
+    const remove = document.createElement("button");
+    remove.className = "btn small danger";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", ()=>{
+      state.draft.parts.splice(idx, 1);
+      // if we removed the one being edited, cancel edit mode
+      if(state.draft.editingPartIndex === idx){
+        cancelEditDraftPart();
+      }else if(state.draft.editingPartIndex !== null && state.draft.editingPartIndex > idx){
+        state.draft.editingPartIndex -= 1;
+      }
+      renderDraftPartsPreviewAndList();
+      renderPartsStatus();
+    });
+
+    actions.appendChild(edit);
+    actions.appendChild(remove);
+
+    row.appendChild(meta);
+    row.appendChild(actions);
+
+    list.appendChild(row);
+  });
+
+  renderPartsStatus();
 }
 
-function tagCell(i){
+function renderPartsStatus(){
+  const status = el("partsStatus");
+  status.innerHTML = "";
 
-let q=questions[editingIndex]
+  const noParts = el("qNoParts").checked;
+  if(noParts){
+    status.innerHTML = `<div class="ok">No parts selected. The question will be treated as a single block with a thick divider at the end.</div>`;
+    return;
+  }
 
-if(tags.length===0)return
+  const struct = { noParts:false, parts: state.draft.parts };
+  const sum = totalMarksFromStructure(struct);
 
-q.tags[i]=tags[tags.length-1]
+  const qMarks = Number(el("qMarks").value || 0);
+  if(!qMarks){
+    status.innerHTML = `<div class="warn">Enter “# of marks” for the question so the structure can be validated.</div>`;
+    return;
+  }
 
-renderEditor()
+  if(state.draft.parts.length === 0){
+    status.innerHTML = `<div class="warn">Add at least one part (a–h), or tick 'This question does not have parts'.</div>`;
+    return;
+  }
 
+  if(sum !== qMarks){
+    status.innerHTML = `<div class="warn">Structure marks total <b>${sum}</b>, but question marks is <b>${qMarks}</b>. Adjust parts/subparts to match.</div>`;
+  }else{
+    status.innerHTML = `<div class="ok">Structure total matches the question total: <b>${qMarks}</b> marks.</div>`;
+  }
 }
 
+function clearDraftParts(){
+  state.draft.parts = [];
+  state.draft.editingPartIndex = null;
+
+  el("partLabel").value = "a";
+  el("partMarks").value = "1";
+  el("partHasSubparts").checked = false;
+  el("subpartsBuilder").style.display = "none";
+  el("subpartsContainer").innerHTML = "";
+  el("nextSubpart").checked = false;
+
+  el("addOrSavePartBtn").textContent = "Add this part to draft";
+  el("cancelEditPartBtn").style.display = "none";
+
+  renderDraftPartsPreviewAndList();
+}
+
+function loadDraftPartForEditing(index){
+  const p = state.draft.parts[index];
+  if(!p) return;
+
+  state.draft.editingPartIndex = index;
+
+  el("partLabel").value = p.label;
+  if(!p.hasSubparts){
+    el("partMarks").value = String(p.marks);
+  }else{
+    el("partMarks").value = "1";
+  }
+
+  el("partHasSubparts").checked = !!p.hasSubparts;
+  el("subpartsBuilder").style.display = p.hasSubparts ? "block" : "none";
+
+  if(p.hasSubparts){
+    rebuildSubpartsUI((p.subparts ?? []).map(sp => ({ label: sp.label, marks: sp.marks })));
+  }else{
+    el("subpartsContainer").innerHTML = "";
+  }
+
+  el("addOrSavePartBtn").textContent = "Save changes";
+  el("cancelEditPartBtn").style.display = "inline-block";
+
+  renderDraftPartsPreviewAndList();
+}
+
+function cancelEditDraftPart(){
+  state.draft.editingPartIndex = null;
+
+  el("partLabel").value = "a";
+  el("partMarks").value = "1";
+  el("partHasSubparts").checked = false;
+  el("subpartsBuilder").style.display = "none";
+  el("subpartsContainer").innerHTML = "";
+  el("nextSubpart").checked = false;
+
+  el("addOrSavePartBtn").textContent = "Add this part to draft";
+  el("cancelEditPartBtn").style.display = "none";
+
+  renderDraftPartsPreviewAndList();
+}
+
+function addOrSaveDraftPart(){
+  const label = el("partLabel").value;
+  const marks = Number(el("partMarks").value);
+  const hasSubparts = el("partHasSubparts").checked;
+
+  const editingIdx = state.draft.editingPartIndex;
+
+  // Prevent duplicate labels (except when editing itself)
+  const duplicate = state.draft.parts.some((p, idx)=>p.label === label && idx !== editingIdx);
+  if(duplicate){
+    alert(`Part (${label}) already exists in the draft.`);
+    return;
+  }
+
+  let newPart;
+  if(!hasSubparts){
+    newPart = { label, marks, hasSubparts:false, subparts:[] };
+  }else{
+    const subparts = getSubpartsFromUI();
+    const set = new Set(subparts.map(s=>s.label));
+    if(set.size !== subparts.length){
+      alert("Duplicate subpart labels detected. Each subpart label can only be used once.");
+      return;
+    }
+    newPart = { label, marks:null, hasSubparts:true, subparts };
+  }
+
+  if(editingIdx === null){
+    state.draft.parts.push(newPart);
+  }else{
+    state.draft.parts[editingIdx] = newPart;
+    state.draft.editingPartIndex = null;
+  }
+
+  el("addOrSavePartBtn").textContent = "Add this part to draft";
+  el("cancelEditPartBtn").style.display = "none";
+
+  el("partHasSubparts").checked = false;
+  el("subpartsBuilder").style.display = "none";
+  el("subpartsContainer").innerHTML = "";
+  el("nextSubpart").checked = false;
+
+  // auto-advance label if not editing
+  if(editingIdx === null){
+    const used = new Set(state.draft.parts.map(p=>p.label));
+    const next = partLabelOptions().find(x=>!used.has(x));
+    if(next) el("partLabel").value = next;
+  }
+
+  renderDraftPartsPreviewAndList();
+}
+
+/** actions */
+function addQuestion(){
+  const qNum = Number(el("qNum").value);
+  const qMarks = Number(el("qMarks").value);
+  const desc = el("qDesc").value.trim();
+  const noParts = el("qNoParts").checked;
+
+  if(!qNum || qNum < 1){
+    alert("Please enter a valid question number.");
+    return;
+  }
+  if(!qMarks || qMarks < 1){
+    alert("Please enter a valid # of marks for the question.");
+    return;
+  }
+  if(state.questions.some(q=>q.qNum === qNum)){
+    alert(`Question ${qNum} already exists.`);
+    return;
+  }
+
+  let structure = { noParts: !!noParts, parts: [] };
+
+  if(noParts){
+    structure.parts = [];
+  }else{
+    if(state.draft.parts.length === 0){
+      alert("Add at least one part (a–h), or tick 'This question does not have parts'.");
+      return;
+    }
+    structure.parts = state.draft.parts.map(p => ({
+      label: p.label,
+      marks: p.hasSubparts ? null : p.marks,
+      hasSubparts: !!p.hasSubparts,
+      subparts: (p.subparts ?? []).map(sp => ({ label: sp.label, marks: Number(sp.marks) }))
+    }));
+
+    const sum = totalMarksFromStructure(structure);
+    if(sum !== qMarks){
+      alert(`Structure marks total ${sum}, but question marks is ${qMarks}. Please adjust to match.`);
+      return;
+    }
+  }
+
+  const newQ = {
+    qNum,
+    qMarks,
+    desc,
+    highlight: false, // now controlled in the question card
+    structure,
+    segmentPlan: [],
+    marks: []
+  };
+
+  newQ.segmentPlan = buildSegmentPlan(newQ);
+
+  state.questions.push(newQ);
+  state.selectedQIndex = state.questions.findIndex(q=>q.qNum===qNum);
+
+  el("qNum").value = "";
+  el("qMarks").value = "";
+  el("qDesc").value = "";
+  el("qNoParts").checked = false;
+
+  clearDraftParts();
+
+  saveState();
+  renderAll();
+}
+
+function tagMark(ao, level){
+  const q = requireSelectedQuestion();
+  if(!q) return;
+
+  const tagged = q.marks.length;
+  let segIndex = 0;
+  let offset = 0;
+  while(segIndex < q.segmentPlan.length){
+    const seg = q.segmentPlan[segIndex];
+    if(tagged < offset + seg.marksCount) break;
+    offset += seg.marksCount;
+    segIndex += 1;
+  }
+
+  if(segIndex >= q.segmentPlan.length){
+    alert("This question is already fully tagged.");
+    return;
+  }
+
+  const seg = q.segmentPlan[segIndex];
+  const usedInSeg = tagged - offset;
+  const remaining = seg.marksCount - usedInSeg;
+
+  const isLastInSegment = remaining === 1;
+  const boundaryAfter = isLastInSegment ? seg.dividerAfter : "none";
+
+  q.marks.push({ ao, level, boundaryAfter });
+
+  saveState();
+  renderAll();
+}
+
+function rebuildBoundariesForQuestion(q){
+  q.marks.forEach(m => m.boundaryAfter = "none");
+
+  let idx = 0;
+  for(const seg of q.segmentPlan){
+    const end = idx + seg.marksCount - 1;
+    if(end < q.marks.length){
+      q.marks[end].boundaryAfter = seg.dividerAfter;
+    }
+    idx += seg.marksCount;
+  }
+}
+
+function undo(){
+  const q = requireSelectedQuestion();
+  if(!q) return;
+  if(q.marks.length === 0){
+    alert("Nothing to undo.");
+    return;
+  }
+  q.marks.pop();
+  rebuildBoundariesForQuestion(q);
+  saveState();
+  renderAll();
+}
+
+function deleteSelectedQuestion(){
+  if(state.selectedQIndex === null) return;
+  const q = state.questions[state.selectedQIndex];
+  if(!q) return;
+
+  if(!confirm(`Delete Q${q.qNum}? This removes its structure and tags.`)) return;
+
+  state.questions.splice(state.selectedQIndex, 1);
+  state.selectedQIndex = null;
+  saveState();
+  renderAll();
+}
+
+function exportJSON(){
+  const payload = JSON.stringify({ paper: state.paper, questions: state.questions }, null, 2);
+  const blob = new Blob([payload], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ao-heatmap.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed.paper || !Array.isArray(parsed.questions)) throw new Error("Invalid format.");
+      state.paper = parsed.paper;
+      state.questions = parsed.questions;
+
+      state.questions.forEach(q=>{
+        q.marks = q.marks ?? [];
+        q.highlight = !!q.highlight;
+        q.structure = q.structure ?? { noParts:true, parts:[] };
+        q.qMarks = Number(q.qMarks || 0);
+        q.segmentPlan = q.segmentPlan && q.segmentPlan.length ? q.segmentPlan : buildSegmentPlan(q);
+        rebuildBoundariesForQuestion(q);
+      });
+
+      state.selectedQIndex = null;
+      state.draft.parts = [];
+      state.draft.editingPartIndex = null;
+      saveState();
+      renderAll();
+    }catch(err){
+      alert("Import failed: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetAll(){
+  if(!confirm("Clear everything?")) return;
+  localStorage.removeItem(LS_KEY);
+  state = {
+    paper: { title:"", totalMarks:0, note:"" },
+    questions: [],
+    selectedQIndex: null,
+    kbdAO: null,
+    draft: { parts: [], editingPartIndex: null }
+  };
+  clearDraftParts();
+  renderAll();
+}
+
+/** events */
+el("addQuestionBtn").addEventListener("click", addQuestion);
+
+el("paperTitle").addEventListener("input", ()=>{
+  state.paper.title = el("paperTitle").value;
+  saveState(); renderAll();
+});
+el("paperTotal").addEventListener("input", ()=>{
+  state.paper.totalMarks = Number(el("paperTotal").value || 0);
+  saveState(); renderAll();
+});
+el("paperNote").addEventListener("input", ()=>{
+  state.paper.note = el("paperNote").value;
+  saveState(); renderAll();
+});
+
+el("qNoParts").addEventListener("change", ()=>renderAll());
+el("partHasSubparts").addEventListener("change", ()=>renderAll());
+
+el("nextSubpart").addEventListener("change", ()=>{
+  if(el("nextSubpart").checked){
+    addNextSubpartRow();
+  }
+});
+
+el("subpartsContainer").addEventListener("change", (e)=>{
+  if(e.target && e.target.matches("select[data-sub-index]")){
+    normalizeSubpartDropdownOptions();
+  }
+});
+
+el("addOrSavePartBtn").addEventListener("click", addOrSaveDraftPart);
+el("cancelEditPartBtn").addEventListener("click", cancelEditDraftPart);
+
+el("clearPartsBtn").addEventListener("click", ()=>{
+  clearDraftParts();
+});
+
+document.querySelectorAll("[data-ao][data-level]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const ao = btn.getAttribute("data-ao");
+    const level = Number(btn.getAttribute("data-level"));
+    tagMark(ao, level);
+  });
+});
+
+el("undoBtn").addEventListener("click", undo);
+el("deleteQuestionBtn").addEventListener("click", deleteSelectedQuestion);
+
+el("exportBtn").addEventListener("click", exportJSON);
+el("importBtn").addEventListener("click", ()=> el("importFile").click());
+el("importFile").addEventListener("change", (e)=>{
+  const f = e.target.files?.[0];
+  if(f) importJSON(f);
+  e.target.value = "";
+});
+el("resetBtn").addEventListener("click", resetAll);
+
+el("printBtn").addEventListener("click", ()=> window.print());
+
+window.addEventListener("keydown", (e)=>{
+  const k = e.key.toLowerCase();
+  if(["s","u","i"].includes(k)){
+    state.kbdAO = k.toUpperCase();
+    return;
+  }
+  if(["1","2","3"].includes(k) && state.kbdAO){
+    tagMark(state.kbdAO, Number(k));
+    state.kbdAO = null;
+  }
+});
+
+// keep validation current
+el("qMarks").addEventListener("input", ()=>{
+  renderDraftPartsPreviewAndList();
+});
+
+// init
+initDropdowns();
+clearDraftParts();
+renderAll();
 </script>
-
 </body>
 </html>
