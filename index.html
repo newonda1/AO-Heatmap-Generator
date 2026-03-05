@@ -122,4 +122,1449 @@
     }
     th{
       background:#0c1836;
-      font
+      font-weight:800;
+      color:var(--text);
+    }
+    td.desc{ text-align:left; min-width:260px; }
+    td.qnum{ width:48px; font-weight:900; }
+
+    tr.hl td{ background: rgba(24,58,122,0.45); }
+
+    /* mark cells */
+    td.mark{
+      width:26px;
+      min-width:26px;
+      padding:0;
+      height:26px;
+      font-weight:900;
+      color:#111;
+    }
+    td.blank{
+      width:26px;
+      min-width:26px;
+      padding:0;
+      height:26px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    /* level coloring for marks */
+    td.L1{ background: var(--l1); }
+    td.L2{ background: var(--l2); }
+    td.L3{ background: var(--l3); }
+
+    /* dividers after a mark */
+    .after-thick{ border-right:3px solid #000 !important; }
+    .after-dashed{ border-right:2px dashed #000 !important; }
+
+    /* Editor preview */
+    .previewStrip{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      padding:10px;
+      background: rgba(11,20,48,0.65);
+      border:1px solid rgba(42,58,99,0.8);
+      border-radius:12px;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:34px;
+      height:28px;
+      border-radius:8px;
+      font-weight:900;
+      color:#111;
+      border:1px solid rgba(0,0,0,0.25);
+      position:relative;
+    }
+    .chip.after-thick::after{
+      content:"";
+      position:absolute;
+      right:-4px;
+      top:2px;
+      bottom:2px;
+      width:3px;
+      background:#000;
+      border-radius:2px;
+    }
+    .chip.after-dashed::after{
+      content:"";
+      position:absolute;
+      right:-4px;
+      top:2px;
+      bottom:2px;
+      width:0;
+      border-right:2px dashed #000;
+    }
+    .chip.L1{ background: var(--l1); }
+    .chip.L2{ background: var(--l2); }
+    .chip.L3{ background: var(--l3); }
+
+    .segList{
+      margin-top:10px;
+      border-top:1px solid rgba(42,58,99,0.6);
+      padding-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .segRow{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      background: rgba(11,20,48,0.55);
+      border:1px solid rgba(42,58,99,0.7);
+      border-radius:12px;
+      padding:10px;
+    }
+    .segRow .left{
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .segRow .title{ font-weight:900; font-size:12px; }
+    .segRow .sub{ font-size:12px; color:var(--muted); }
+
+    .footerRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      padding:2px 6px;
+      border-radius:7px;
+      color:var(--text);
+      font-size:12px;
+    }
+
+    .hintBox{
+      background: rgba(11,20,48,0.55);
+      border:1px solid rgba(42,58,99,0.7);
+      border-radius:12px;
+      padding:10px;
+      color: var(--muted);
+      font-size:12px;
+      line-height:1.35;
+    }
+
+    .warn{
+      background: rgba(74,30,42,0.35);
+      border:1px solid rgba(122,45,63,0.65);
+      color:#ffd0d8;
+      border-radius:12px;
+      padding:10px;
+      font-size:12px;
+      line-height:1.35;
+    }
+
+    .ok{
+      background: rgba(28,47,102,0.35);
+      border:1px solid rgba(42,58,99,0.65);
+      color:#d5e2ff;
+      border-radius:12px;
+      padding:10px;
+      font-size:12px;
+      line-height:1.35;
+    }
+  </style>
+</head>
+<body>
+  <h1>AO Heatmap Generator</h1>
+  <div class="muted">Build question structure first (parts/subparts) → editor follows the structure to tag marks. Colors = level (L1 green, L2 yellow, L3 red).</div>
+
+  <div class="row" style="margin-top:14px;">
+    <div class="card left">
+      <h2>Paper setup</h2>
+      <div class="grid">
+        <div>
+          <label>Paper title</label>
+          <input id="paperTitle" placeholder="e.g., AA SL Paper 1 (May 2026)" />
+        </div>
+        <div>
+          <label>Total marks (paper)</label>
+          <input id="paperTotal" type="number" min="0" value="0"/>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <label>Note</label>
+        <input id="paperNote" placeholder="e.g., Questions highlighted in blue are common with HL" />
+      </div>
+
+      <div class="segList" style="margin-top:14px;">
+        <h2 style="margin:0;">Add a question</h2>
+
+        <!-- Change #1: Q# | #marks | description in a row -->
+        <div class="grid3">
+          <div>
+            <label>Q#</label>
+            <input id="qNum" type="number" min="1" placeholder="1" />
+          </div>
+          <div>
+            <label># of marks</label>
+            <input id="qMarks" type="number" min="1" placeholder="e.g., 12" />
+          </div>
+          <div>
+            <label>Brief description</label>
+            <input id="qDesc" placeholder="e.g., Composite functions" />
+          </div>
+        </div>
+
+        <!-- Change #2 label -->
+        <div class="inline" style="justify-content:space-between; margin-top:10px;">
+          <label class="check">
+            <input id="qBlue" type="checkbox" />
+            Highlight this question as being common to another paper
+          </label>
+          <button class="btn primary" id="addQuestionBtn">Add question</button>
+        </div>
+
+        <!-- Change #3: no parts -->
+        <label class="check" style="margin-top:8px;">
+          <input id="qNoParts" type="checkbox" />
+          This question does not have parts
+        </label>
+
+        <!-- Parts builder (only when qNoParts is NOT checked) -->
+        <div id="partsBuilder" style="margin-top:10px;">
+          <div class="hintBox">
+            Build the question structure here. The editor will follow this structure and guide you through tagging marks.
+          </div>
+
+          <!-- Part row -->
+          <div style="margin-top:10px;">
+            <div class="grid2">
+              <div>
+                <label>Question part</label>
+                <select id="partLabel"></select>
+              </div>
+              <div>
+                <label>Marks for this part</label>
+                <select id="partMarks"></select>
+              </div>
+            </div>
+
+            <!-- Change #4: part has subparts -->
+            <label class="check" style="margin-top:10px;">
+              <input id="partHasSubparts" type="checkbox" />
+              This part is broken into subparts
+            </label>
+
+            <!-- Subparts builder -->
+            <div id="subpartsBuilder" style="margin-top:10px; display:none;">
+              <div id="subpartsContainer"></div>
+
+              <label class="check" style="margin-top:10px;">
+                <input id="nextSubpart" type="checkbox" />
+                Next subpart
+              </label>
+
+              <div class="muted" style="margin-top:6px;">
+                Subpart labels are limited to (i)–(v) and already-used labels are removed from new dropdowns.
+              </div>
+            </div>
+
+            <!-- (Not requested, but needed to build multi-part questions):
+                 We'll keep a minimal "Add part" button instead of a checkbox for now. -->
+            <div class="inline" style="margin-top:12px; justify-content:space-between;">
+              <button class="btn small" id="addPartBtn">Add this part to question</button>
+              <button class="btn small danger" id="clearPartsBtn">Clear parts</button>
+            </div>
+
+            <div id="partsStatus" style="margin-top:10px;"></div>
+
+            <div class="segList" style="margin-top:12px;">
+              <div class="muted">Parts/subparts added to this question:</div>
+              <div id="partsPreview" class="hintBox">None yet.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="muted" style="margin-top:10px;">
+          Tip: click a question below to edit its AO tags.
+        </div>
+
+        <div id="questionList" class="segList"></div>
+      </div>
+
+      <div class="segList">
+        <h2 style="margin:0;">Data controls</h2>
+        <div class="inline">
+          <button class="btn small" id="exportBtn">Export JSON</button>
+          <button class="btn small" id="importBtn">Import JSON</button>
+          <input id="importFile" type="file" accept="application/json" style="display:none;" />
+          <button class="btn small danger" id="resetBtn">Reset (clear everything)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card right">
+      <h2>Editor</h2>
+
+      <div id="editorEmpty" class="muted">
+        Select a question on the left to tag marks.
+      </div>
+
+      <div id="editor" style="display:none;">
+        <div class="inline" style="justify-content:space-between;">
+          <div>
+            <div style="font-weight:900; font-size:14px;" id="editTitle"></div>
+            <div class="muted" id="editSub"></div>
+          </div>
+          <button class="btn small danger" id="deleteQuestionBtn">Delete question</button>
+        </div>
+
+        <div style="margin-top:12px;" class="hintBox" id="structureHint"></div>
+
+        <div class="segList">
+          <h2 style="margin:0;">Tag marks</h2>
+
+          <div class="muted">
+            Current segment: <span class="kbd" id="currentSeg">—</span>
+            &nbsp; Remaining in segment: <span class="kbd" id="remaining">—</span>
+          </div>
+
+          <div class="inline" style="margin-top:10px; gap:8px;">
+            <button class="btn pill lvl1" data-ao="S" data-level="1">S1</button>
+            <button class="btn pill lvl2" data-ao="S" data-level="2">S2</button>
+            <button class="btn pill lvl3" data-ao="S" data-level="3">S3</button>
+
+            <button class="btn pill lvl1" data-ao="U" data-level="1">U1</button>
+            <button class="btn pill lvl2" data-ao="U" data-level="2">U2</button>
+            <button class="btn pill lvl3" data-ao="U" data-level="3">U3</button>
+
+            <button class="btn pill lvl1" data-ao="I" data-level="1">I1</button>
+            <button class="btn pill lvl2" data-ao="I" data-level="2">I2</button>
+            <button class="btn pill lvl3" data-ao="I" data-level="3">I3</button>
+
+            <button class="btn small" id="undoBtn">Undo</button>
+          </div>
+
+          <div class="muted" style="margin-top:10px;">
+            Optional keyboard speed-up: <span class="kbd">S</span>/<span class="kbd">U</span>/<span class="kbd">I</span> then <span class="kbd">1</span>/<span class="kbd">2</span>/<span class="kbd">3</span>.
+          </div>
+
+          <div style="margin-top:10px;">
+            <div class="muted">Preview (current question marks)</div>
+            <div class="previewStrip" id="previewStrip"></div>
+          </div>
+
+          <div class="segList">
+            <div class="muted">Segments (auto-built from your structure):</div>
+            <div id="segmentPlanList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <div class="footerRow">
+        <div>
+          <h2 style="margin:0 0 6px 0;">Heat map</h2>
+          <div class="muted" id="paperMeta">—</div>
+        </div>
+        <div class="inline">
+          <button class="btn small" id="printBtn">Print / Save as PDF</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px; overflow:auto;">
+        <table id="heatTable"></table>
+      </div>
+
+      <div style="margin-top:18px;">
+        <h2>AO Matrix</h2>
+        <div style="overflow:auto;">
+          <table id="matrixTable"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/** -------------------------
+ * Data model (localStorage)
+ * -------------------------
+ * paper: { title, totalMarks, note }
+ * questions: [
+ *   {
+ *     qNum, qMarks, desc, highlight,
+ *     structure: {
+ *       noParts: boolean,
+ *       parts: [
+ *         { label:'a', marks:number, hasSubparts:boolean, subparts:[{label:'i', marks:number}, ...] }
+ *       ]
+ *     },
+ *     segmentPlan: [{ label, marksCount, dividerAfter }], // derived from structure
+ *     marks: [{ ao:'S'|'U'|'I', level:1|2|3, boundaryAfter:'none'|'dashed'|'thick' }]
+ *   }
+ * ]
+ */
+const LS_KEY = "ao_heatmap_v2";
+
+let state = loadState() ?? {
+  paper: { title:"", totalMarks:0, note:"" },
+  questions: [],
+  selectedQIndex: null,
+  // keyboard pending
+  kbdAO: null,
+  // add-question builder (not persisted)
+  draft: {
+    parts: [] // temporary parts built before adding question
+  }
+};
+
+const el = (id) => document.getElementById(id);
+
+function saveState(){
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    paper: state.paper,
+    questions: state.questions
+  }));
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    parsed.questions = parsed.questions ?? [];
+    parsed.paper = parsed.paper ?? { title:"", totalMarks:0, note:"" };
+    parsed.questions.forEach(q=>{
+      q.marks = q.marks ?? [];
+      q.segmentPlan = q.segmentPlan ?? [];
+      q.structure = q.structure ?? { noParts:true, parts:[] };
+      q.highlight = !!q.highlight;
+    });
+    return {
+      paper: parsed.paper,
+      questions: parsed.questions,
+      selectedQIndex: null,
+      kbdAO: null,
+      draft: { parts: [] }
+    };
+  }catch(e){
+    console.warn("Failed to load state:", e);
+    return null;
+  }
+}
+
+/** -------------------------
+ * Helpers
+ * ------------------------- */
+function maxMarks(){
+  return Math.max(0, ...state.questions.map(q=>q.marks.length));
+}
+
+function paperTotalTagged(){
+  return state.questions.reduce((acc,q)=>acc + (q.marks?.length ?? 0), 0);
+}
+
+function aoCounts(){
+  const counts = {
+    S: {1:0,2:0,3:0, total:0},
+    U: {1:0,2:0,3:0, total:0},
+    I: {1:0,2:0,3:0, total:0},
+    total: {1:0,2:0,3:0, total:0}
+  };
+  for(const q of state.questions){
+    for(const m of (q.marks ?? [])){
+      counts[m.ao][m.level] += 1;
+      counts[m.ao].total += 1;
+      counts.total[m.level] += 1;
+      counts.total.total += 1;
+    }
+  }
+  return counts;
+}
+
+function pct(n, d){
+  if(!d) return "0%";
+  return Math.round((n/d)*100) + "%";
+}
+
+function boundaryClass(boundaryAfter){
+  if(boundaryAfter === "thick") return "after-thick";
+  if(boundaryAfter === "dashed") return "after-dashed";
+  return "";
+}
+
+function requireSelectedQuestion(){
+  const idx = state.selectedQIndex;
+  if(idx === null || idx < 0 || idx >= state.questions.length) return null;
+  return state.questions[idx];
+}
+
+function romanLabelOptions(){
+  return ["i","ii","iii","iv","v"];
+}
+
+function partLabelOptions(){
+  return ["a","b","c","d","e","f","g","h"];
+}
+
+function buildSegmentPlan(q){
+  // Derive segment plan from structure. Divider rules:
+  // - No parts: one segment, thick at end.
+  // - Parts without subparts: each part is a segment; thick at end of each part.
+  // - Parts with subparts: each subpart is a segment; dashed between subparts; thick after last subpart of the part.
+  const plan = [];
+  const noParts = !!q.structure?.noParts;
+
+  if(noParts){
+    plan.push({ label: "", marksCount: q.qMarks, dividerAfter: "thick" });
+    return plan;
+  }
+
+  const parts = q.structure?.parts ?? [];
+  for(const p of parts){
+    if(!p.hasSubparts){
+      plan.push({ label: p.label, marksCount: p.marks, dividerAfter: "thick" });
+    }else{
+      const subs = p.subparts ?? [];
+      subs.forEach((sp, idx)=>{
+        const isLast = idx === subs.length - 1;
+        plan.push({
+          label: `${p.label}(${sp.label})`,
+          marksCount: sp.marks,
+          dividerAfter: isLast ? "thick" : "dashed"
+        });
+      });
+    }
+  }
+  return plan;
+}
+
+function totalMarksFromStructure(struct){
+  if(struct.noParts) return null; // total comes from qMarks
+  let sum = 0;
+  for(const p of (struct.parts ?? [])){
+    if(!p.hasSubparts){
+      sum += Number(p.marks || 0);
+    }else{
+      sum += (p.subparts ?? []).reduce((a,s)=>a + Number(s.marks||0), 0);
+    }
+  }
+  return sum;
+}
+
+/** -------------------------
+ * UI: Populate dropdowns
+ * ------------------------- */
+function initDropdowns(){
+  // Part label dropdown
+  const partSel = el("partLabel");
+  partSel.innerHTML = "";
+  partLabelOptions().forEach(l=>{
+    const opt = document.createElement("option");
+    opt.value = l;
+    opt.textContent = `(${l})`;
+    partSel.appendChild(opt);
+  });
+
+  // Marks dropdown 1..10
+  const pm = el("partMarks");
+  pm.innerHTML = "";
+  for(let i=1;i<=10;i++){
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = String(i);
+    pm.appendChild(opt);
+  }
+
+  // subparts builder starts with one line
+  rebuildSubpartsUI([]);
+}
+
+function rebuildSubpartsUI(existing){
+  const container = el("subpartsContainer");
+  container.innerHTML = "";
+
+  const used = new Set(existing.map(x=>x.label));
+  const all = romanLabelOptions();
+
+  existing.forEach((sp, idx)=>{
+    container.appendChild(makeSubpartRow(idx, sp.label, sp.marks, used));
+  });
+
+  if(existing.length === 0){
+    // create first row with (i) default
+    container.appendChild(makeSubpartRow(0, "i", 1, used, true));
+  }
+}
+
+function makeSubpartRow(index, label, marks, usedSet, first=false){
+  const row = document.createElement("div");
+  row.className = "grid2";
+  row.style.marginTop = index === 0 ? "0px" : "10px";
+
+  const left = document.createElement("div");
+  const right = document.createElement("div");
+
+  const lab = document.createElement("label");
+  lab.textContent = index === 0 ? "Subpart" : "Subpart";
+  left.appendChild(lab);
+
+  const sel = document.createElement("select");
+  sel.dataset.subIndex = String(index);
+
+  // options excluding already used labels (except current label)
+  romanLabelOptions().forEach(r=>{
+    if(usedSet.has(r) && r !== label) return;
+    const opt = document.createElement("option");
+    opt.value = r;
+    opt.textContent = `(${r})`;
+    sel.appendChild(opt);
+  });
+  sel.value = label;
+
+  left.appendChild(sel);
+
+  const lab2 = document.createElement("label");
+  lab2.textContent = "Marks for this subpart";
+  right.appendChild(lab2);
+
+  const sel2 = document.createElement("select");
+  sel2.dataset.subMarksIndex = String(index);
+  for(let i=1;i<=10;i++){
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = String(i);
+    sel2.appendChild(opt);
+  }
+  sel2.value = String(marks);
+
+  right.appendChild(sel2);
+
+  row.appendChild(left);
+  row.appendChild(right);
+
+  return row;
+}
+
+function getSubpartsFromUI(){
+  const container = el("subpartsContainer");
+  const rows = Array.from(container.querySelectorAll("select[data-sub-index], select[data-submarks-index]"));
+  // Build by reading pairs
+  const subSelects = Array.from(container.querySelectorAll("select[data-sub-index]"));
+  const subMarkSelects = Array.from(container.querySelectorAll("select[data-submarks-index]"));
+
+  const subs = [];
+  for(let i=0;i<subSelects.length;i++){
+    subs.push({
+      label: subSelects[i].value,
+      marks: Number(subMarkSelects[i].value)
+    });
+  }
+  return subs;
+}
+
+/** -------------------------
+ * Render functions
+ * ------------------------- */
+function renderAll(){
+  // Paper inputs
+  el("paperTitle").value = state.paper.title ?? "";
+  el("paperTotal").value = state.paper.totalMarks ?? 0;
+  el("paperNote").value = state.paper.note ?? "";
+
+  // toggle parts builder visibility
+  const noParts = el("qNoParts").checked;
+  el("partsBuilder").style.display = noParts ? "none" : "block";
+
+  // left question list
+  renderQuestionList();
+
+  // editor
+  renderEditor();
+
+  // tables
+  renderHeatTable();
+  renderMatrixTable();
+
+  // meta
+  const totalTagged = paperTotalTagged();
+  const totalPaper = Number(state.paper.totalMarks || 0);
+  el("paperMeta").textContent =
+    `${state.paper.title || "Untitled paper"} — tagged marks: ${totalTagged}` +
+    (totalPaper ? ` / paper total: ${totalPaper}` : "") +
+    (state.paper.note ? ` • Note: ${state.paper.note}` : "");
+}
+
+function renderQuestionList(){
+  const wrap = el("questionList");
+  wrap.innerHTML = "";
+
+  if(state.questions.length === 0){
+    const d = document.createElement("div");
+    d.className = "muted";
+    d.textContent = "No questions yet.";
+    wrap.appendChild(d);
+    return;
+  }
+
+  state.questions
+    .slice()
+    .sort((a,b)=>a.qNum - b.qNum)
+    .forEach((q) => {
+      const idx = state.questions.indexOf(q);
+      const row = document.createElement("div");
+      row.className = "segRow";
+      row.style.cursor = "pointer";
+      if(idx === state.selectedQIndex){
+        row.style.outline = "2px solid rgba(168,230,163,0.5)";
+      }
+      const left = document.createElement("div");
+      left.className = "left";
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = `Q${q.qNum} — ${q.desc || "(no description)"}`;
+      const sub = document.createElement("div");
+      sub.className = "sub";
+      sub.textContent =
+        `${q.marks.length} tagged / ${q.qMarks} total • ${q.segmentPlan.length} segments` +
+        (q.highlight ? " • common (blue)" : "");
+      left.appendChild(title);
+      left.appendChild(sub);
+
+      const btn = document.createElement("button");
+      btn.className = "btn small";
+      btn.textContent = "Edit";
+      btn.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        state.selectedQIndex = idx;
+        saveState();
+        renderAll();
+      });
+
+      row.appendChild(left);
+      row.appendChild(btn);
+
+      row.addEventListener("click", ()=>{
+        state.selectedQIndex = idx;
+        saveState();
+        renderAll();
+      });
+
+      wrap.appendChild(row);
+    });
+}
+
+function renderEditor(){
+  const q = requireSelectedQuestion();
+  if(!q){
+    el("editorEmpty").style.display = "block";
+    el("editor").style.display = "none";
+    return;
+  }
+  el("editorEmpty").style.display = "block";
+  el("editor").style.display = "block";
+  el("editorEmpty").style.display = "none";
+
+  el("editTitle").textContent = `Editing Q${q.qNum}`;
+  el("editSub").textContent = q.desc || "";
+
+  // Determine current segment based on how many marks have been tagged
+  const tagged = q.marks.length;
+  let segIndex = 0;
+  let offset = 0;
+  while(segIndex < q.segmentPlan.length){
+    const seg = q.segmentPlan[segIndex];
+    if(tagged < offset + seg.marksCount) break;
+    offset += seg.marksCount;
+    segIndex += 1;
+  }
+
+  if(segIndex >= q.segmentPlan.length){
+    el("currentSeg").textContent = "Done";
+    el("remaining").textContent = "0";
+  }else{
+    const seg = q.segmentPlan[segIndex];
+    const usedInSeg = tagged - offset;
+    const remaining = seg.marksCount - usedInSeg;
+    el("currentSeg").textContent = seg.label ? seg.label : "(no parts)";
+    el("remaining").textContent = String(remaining);
+  }
+
+  // structure hint
+  const structureText = q.structure?.noParts
+    ? "Structure: no parts (single block)."
+    : "Structure: " + q.segmentPlan.map(s=>`${s.label || "(no parts)"}: ${s.marksCount}`).join(" • ");
+  el("structureHint").textContent = structureText;
+
+  // preview strip
+  const strip = el("previewStrip");
+  strip.innerHTML = "";
+  if(q.marks.length === 0){
+    const d = document.createElement("div");
+    d.className = "muted";
+    d.textContent = "No marks tagged yet.";
+    strip.appendChild(d);
+  }else{
+    q.marks.forEach((m)=>{
+      const c = document.createElement("div");
+      c.className = `chip L${m.level} ${boundaryClass(m.boundaryAfter)}`;
+      c.textContent = m.ao + m.level;
+      strip.appendChild(c);
+    });
+  }
+
+  // segment plan list
+  const spl = el("segmentPlanList");
+  spl.innerHTML = "";
+  q.segmentPlan.forEach((s, i)=>{
+    const row = document.createElement("div");
+    row.className = "segRow";
+    const left = document.createElement("div");
+    left.className = "left";
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = `${s.label || "(no parts)"} — ${s.marksCount} marks`;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = `Divider after: ${s.dividerAfter}`;
+    left.appendChild(title);
+    left.appendChild(sub);
+
+    const right = document.createElement("div");
+    right.className = "muted";
+    // show whether this segment is done
+    // compute segment range
+    let start = 0;
+    for(let j=0;j<i;j++) start += q.segmentPlan[j].marksCount;
+    const end = start + s.marksCount;
+    right.textContent = q.marks.length >= end ? "✅ complete" : (q.marks.length >= start ? "➡ in progress" : "");
+
+    row.appendChild(left);
+    row.appendChild(right);
+    spl.appendChild(row);
+  });
+}
+
+function renderHeatTable(){
+  const t = el("heatTable");
+  t.innerHTML = "";
+
+  const mm = maxMarks();
+
+  // header
+  const trh = document.createElement("tr");
+  ["Q#", "Brief Description"].forEach((h)=>{
+    const th = document.createElement("th");
+    th.textContent = h;
+    trh.appendChild(th);
+  });
+  const thMarks = document.createElement("th");
+  thMarks.colSpan = Math.max(1, mm);
+  thMarks.textContent = "AO Type and Level";
+  trh.appendChild(thMarks);
+  t.appendChild(trh);
+
+  // rows
+  const sorted = state.questions.slice().sort((a,b)=>a.qNum-b.qNum);
+  for(const q of sorted){
+    const tr = document.createElement("tr");
+    if(q.highlight) tr.classList.add("hl");
+
+    const tdQ = document.createElement("td");
+    tdQ.className = "qnum";
+    tdQ.textContent = q.qNum;
+    tr.appendChild(tdQ);
+
+    const tdD = document.createElement("td");
+    tdD.className = "desc";
+    tdD.textContent = q.desc || "";
+    tr.appendChild(tdD);
+
+    const marks = q.marks ?? [];
+    for(let i=0; i<mm; i++){
+      if(i < marks.length){
+        const m = marks[i];
+        const td = document.createElement("td");
+        td.className = `mark L${m.level} ${boundaryClass(m.boundaryAfter)}`;
+        td.title = `${m.ao}${m.level}`;
+        td.textContent = m.ao; // keep clean like heatmap
+        tr.appendChild(td);
+      }else{
+        const td = document.createElement("td");
+        td.className = "blank";
+        tr.appendChild(td);
+      }
+    }
+    t.appendChild(tr);
+  }
+
+  if(sorted.length === 0){
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2 + Math.max(1, mm);
+    td.className = "muted";
+    td.style.padding = "16px";
+    td.textContent = "Add questions on the left to generate a heatmap.";
+    tr.appendChild(td);
+    t.appendChild(tr);
+  }
+}
+
+function renderMatrixTable(){
+  const t = el("matrixTable");
+  t.innerHTML = "";
+
+  const counts = aoCounts();
+  const total = counts.total.total;
+
+  const header = document.createElement("tr");
+  ["", "Level 1", "Level 2", "Level 3", "Total", "% within tagged"].forEach(h=>{
+    const th = document.createElement("th");
+    th.textContent = h;
+    header.appendChild(th);
+  });
+  t.appendChild(header);
+
+  const rows = [
+    ["Select (S)", "S"],
+    ["Use (U)", "U"],
+    ["Interpret (I)", "I"]
+  ];
+
+  rows.forEach(([label, key])=>{
+    const tr = document.createElement("tr");
+    const td0 = document.createElement("td");
+    td0.style.textAlign = "left";
+    td0.style.fontWeight = "900";
+    td0.textContent = label;
+    tr.appendChild(td0);
+
+    [1,2,3].forEach(lvl=>{
+      const td = document.createElement("td");
+      td.textContent = counts[key][lvl];
+      tr.appendChild(td);
+    });
+
+    const tdT = document.createElement("td");
+    tdT.style.fontWeight = "900";
+    tdT.textContent = counts[key].total;
+    tr.appendChild(tdT);
+
+    const tdP = document.createElement("td");
+    tdP.textContent = pct(counts[key].total, total);
+    tr.appendChild(tdP);
+
+    t.appendChild(tr);
+  });
+
+  // totals row
+  const trTot = document.createElement("tr");
+  const tdLabel = document.createElement("td");
+  tdLabel.style.textAlign = "left";
+  tdLabel.style.fontWeight = "900";
+  tdLabel.textContent = "Total";
+  trTot.appendChild(tdLabel);
+
+  [1,2,3].forEach(lvl=>{
+    const td = document.createElement("td");
+    td.style.fontWeight = "900";
+    td.textContent = counts.total[lvl];
+    trTot.appendChild(td);
+  });
+
+  const tdAll = document.createElement("td");
+  tdAll.style.fontWeight = "900";
+  tdAll.textContent = counts.total.total;
+  trTot.appendChild(tdAll);
+
+  const tdPct = document.createElement("td");
+  tdPct.textContent = "100%";
+  trTot.appendChild(tdPct);
+
+  t.appendChild(trTot);
+
+  // note about paper total vs tagged
+  const totalPaper = Number(state.paper.totalMarks || 0);
+  const trNote = document.createElement("tr");
+  const tdNote = document.createElement("td");
+  tdNote.colSpan = 6;
+  tdNote.style.textAlign = "left";
+  tdNote.style.fontSize = "12px";
+  tdNote.style.color = "var(--muted)";
+  tdNote.style.padding = "10px";
+  if(totalPaper){
+    tdNote.textContent = `${counts.total.total} marks tagged (${pct(counts.total.total, totalPaper)}) compared with paper total (${totalPaper}).`;
+  }else{
+    tdNote.textContent = `Set "Total marks (paper)" to get the exam-percentage comparison.`;
+  }
+  trNote.appendChild(tdNote);
+  t.appendChild(trNote);
+}
+
+/** -------------------------
+ * Add-question structure builder
+ * ------------------------- */
+function updatePartsUI(){
+  const noParts = el("qNoParts").checked;
+  el("partsBuilder").style.display = noParts ? "none" : "block";
+
+  const hasSub = el("partHasSubparts").checked;
+  el("subpartsBuilder").style.display = hasSub ? "block" : "none";
+
+  // If subparts enabled and no rows exist, ensure one row exists
+  if(hasSub){
+    if(el("subpartsContainer").children.length === 0){
+      rebuildSubpartsUI([]);
+    }
+  }
+  renderPartsPreview();
+  renderAll(); // to keep consistent
+}
+
+function clearDraftParts(){
+  state.draft.parts = [];
+  // reset UI to defaults
+  el("partLabel").value = "a";
+  el("partMarks").value = "1";
+  el("partHasSubparts").checked = false;
+  el("subpartsBuilder").style.display = "none";
+  el("subpartsContainer").innerHTML = "";
+  el("nextSubpart").checked = false;
+  renderPartsPreview();
+}
+
+function renderPartsPreview(){
+  const box = el("partsPreview");
+  const qMarks = Number(el("qMarks").value || 0);
+
+  if(state.draft.parts.length === 0){
+    box.textContent = "None yet.";
+  }else{
+    const lines = [];
+    for(const p of state.draft.parts){
+      if(!p.hasSubparts){
+        lines.push(`(${p.label}) — ${p.marks}`);
+      }else{
+        const subs = p.subparts.map(sp=>`(${sp.label}) ${sp.marks}`).join(", ");
+        const sum = p.subparts.reduce((a,s)=>a+s.marks,0);
+        lines.push(`(${p.label}) — subparts: ${subs}  [sum ${sum}]`);
+      }
+    }
+    box.textContent = lines.join(" • ");
+  }
+
+  // status / validation
+  const status = el("partsStatus");
+  status.innerHTML = "";
+
+  const noParts = el("qNoParts").checked;
+  if(noParts){
+    status.innerHTML = `<div class="ok">No parts selected. The question will be treated as a single block with a thick divider at the end.</div>`;
+    return;
+  }
+
+  const struct = { noParts:false, parts: state.draft.parts };
+  const sum = totalMarksFromStructure(struct);
+
+  if(!qMarks){
+    status.innerHTML = `<div class="warn">Enter “# of marks” for the question so the structure can be validated.</div>`;
+    return;
+  }
+
+  if(state.draft.parts.length === 0){
+    status.innerHTML = `<div class="warn">Add at least one part (a–h) so the editor knows how to segment the question.</div>`;
+    return;
+  }
+
+  if(sum !== qMarks){
+    status.innerHTML = `<div class="warn">Structure marks total <b>${sum}</b>, but question marks is <b>${qMarks}</b>. Adjust parts/subparts to match.</div>`;
+  }else{
+    status.innerHTML = `<div class="ok">Structure total matches the question total: <b>${qMarks}</b> marks.</div>`;
+  }
+}
+
+function addDraftPart(){
+  const label = el("partLabel").value;
+  const marks = Number(el("partMarks").value);
+  const hasSubparts = el("partHasSubparts").checked;
+
+  // prevent duplicate part labels
+  if(state.draft.parts.some(p=>p.label === label)){
+    alert(`Part (${label}) already added.`);
+    return;
+  }
+
+  if(!hasSubparts){
+    state.draft.parts.push({ label, marks, hasSubparts:false, subparts:[] });
+  }else{
+    const subparts = getSubpartsFromUI();
+
+    // validate unique subpart labels
+    const set = new Set(subparts.map(s=>s.label));
+    if(set.size !== subparts.length){
+      alert("Duplicate subpart labels detected. Each subpart label can only be used once.");
+      return;
+    }
+
+    state.draft.parts.push({ label, marks:null, hasSubparts:true, subparts });
+  }
+
+  // auto-advance part label to next available
+  const used = new Set(state.draft.parts.map(p=>p.label));
+  const next = partLabelOptions().find(x=>!used.has(x));
+  if(next) el("partLabel").value = next;
+
+  // reset subparts UI
+  el("partHasSubparts").checked = false;
+  el("subpartsBuilder").style.display = "none";
+  el("subpartsContainer").innerHTML = "";
+  el("nextSubpart").checked = false;
+
+  renderPartsPreview();
+}
+
+function addNextSubpartRow(){
+  const container = el("subpartsContainer");
+  const existing = getSubpartsFromUI();
+  const used = new Set(existing.map(x=>x.label));
+  const remaining = romanLabelOptions().filter(x=>!used.has(x));
+
+  if(remaining.length === 0){
+    alert("Maximum subparts reached (i)–(v).");
+    el("nextSubpart").checked = false;
+    return;
+  }
+
+  // Append a new row defaulting to first remaining label
+  const idx = existing.length;
+  const usedSet = new Set(existing.map(x=>x.label));
+  const row = makeSubpartRow(idx, remaining[0], 1, usedSet);
+  container.appendChild(row);
+
+  // Once added, untick checkbox (acts like "add one more")
+  el("nextSubpart").checked = false;
+
+  // Rebuild options across all rows to remove duplicates cleanly
+  normalizeSubpartDropdownOptions();
+}
+
+function normalizeSubpartDropdownOptions(){
+  const container = el("subpartsContainer");
+  const subSelects = Array.from(container.querySelectorAll("select[data-sub-index]"));
+  const subMarkSelects = Array.from(container.querySelectorAll("select[data-submarks-index]"));
+
+  const current = subSelects.map(s=>s.value);
+  const used = new Set(current);
+
+  // Rebuild each select options excluding already used (except its own)
+  subSelects.forEach((sel, idx)=>{
+    const keep = sel.value;
+    sel.innerHTML = "";
+    romanLabelOptions().forEach(r=>{
+      if(used.has(r) && r !== keep) return;
+      const opt = document.createElement("option");
+      opt.value = r;
+      opt.textContent = `(${r})`;
+      sel.appendChild(opt);
+    });
+    sel.value = keep;
+  });
+}
+
+/** -------------------------
+ * Actions
+ * ------------------------- */
+function addQuestion(){
+  const qNum = Number(el("qNum").value);
+  const qMarks = Number(el("qMarks").value);
+  const desc = el("qDesc").value.trim();
+  const highlight = el("qBlue").checked;
+  const noParts = el("qNoParts").checked;
+
+  if(!qNum || qNum < 1){
+    alert("Please enter a valid question number.");
+    return;
+  }
+  if(!qMarks || qMarks < 1){
+    alert("Please enter a valid # of marks for the question.");
+    return;
+  }
+  if(state.questions.some(q=>q.qNum === qNum)){
+    alert(`Question ${qNum} already exists.`);
+    return;
+  }
+
+  let structure = { noParts: !!noParts, parts: [] };
+
+  if(noParts){
+    // ignore draft parts
+    structure.parts = [];
+  }else{
+    // validate draft parts exist and total matches qMarks
+    if(state.draft.parts.length === 0){
+      alert("Add at least one part (a–h), or tick 'This question does not have parts'.");
+      return;
+    }
+    structure.parts = state.draft.parts.map(p => ({
+      label: p.label,
+      marks: p.hasSubparts ? null : p.marks,
+      hasSubparts: !!p.hasSubparts,
+      subparts: (p.subparts ?? []).map(sp => ({ label: sp.label, marks: Number(sp.marks) }))
+    }));
+
+    const sum = totalMarksFromStructure(structure);
+    if(sum !== qMarks){
+      alert(`Structure marks total ${sum}, but question marks is ${qMarks}. Please adjust to match.`);
+      return;
+    }
+  }
+
+  const newQ = {
+    qNum,
+    qMarks,
+    desc,
+    highlight,
+    structure,
+    segmentPlan: [],
+    marks: []
+  };
+
+  newQ.segmentPlan = buildSegmentPlan(newQ);
+
+  state.questions.push(newQ);
+  state.selectedQIndex = state.questions.findIndex(q=>q.qNum===qNum);
+
+  // clear add-question fields
+  el("qNum").value = "";
+  el("qMarks").value = "";
+  el("qDesc").value = "";
+  el("qBlue").checked = false;
+  el("qNoParts").checked = false;
+
+  // clear draft parts
+  clearDraftParts();
+
+  saveState();
+  renderAll();
+}
+
+function tagMark(ao, level){
+  const q = requireSelectedQuestion();
+  if(!q) return;
+
+  // Figure out which segment we're currently in
+  const tagged = q.marks.length;
+  let segIndex = 0;
+  let offset = 0;
+  while(segIndex < q.segmentPlan.length){
+    const seg = q.segmentPlan[segIndex];
+    if(tagged < offset + seg.marksCount) break;
+    offset += seg.marksCount;
+    segIndex += 1;
+  }
+
+  if(segIndex >= q.segmentPlan.length){
+    alert("This question is already fully tagged.");
+    return;
+  }
+
+  const seg = q.segmentPlan[segIndex];
+  const usedInSeg = tagged - offset;
+  const remaining = seg.marksCount - usedInSeg;
+
+  const isLastInSegment = remaining === 1;
+  const boundaryAfter = isLastInSegment ? seg.dividerAfter : "none";
+
+  q.marks.push({ ao, level, boundaryAfter });
+
+  saveState();
+  renderAll();
+}
+
+function undo(){
+  const q = requireSelectedQuestion();
+  if(!q) return;
+  if(q.marks.length === 0){
+    alert("Nothing to undo.");
+    return;
+  }
+  q.marks.pop();
+
+  // If we popped a boundary mark, we should remove boundaryAfter from the new last mark
+  const newLast = q.marks[q.marks.length - 1];
+  if(newLast){
+    // Recompute whether newLast should have a boundaryAfter (it might be last in a segment)
+    // We'll reset all boundaryAfter and rebuild based on segment plan:
+    rebuildBoundariesForQuestion(q);
+  }
+
+  saveState();
+  renderAll();
+}
+
+function rebuildBoundariesForQuestion(q){
+  // Clear boundaries, then reapply for marks that end a segment
+  q.marks.forEach(m => m.boundaryAfter = "none");
+
+  let idx = 0;
+  for(const seg of q.segmentPlan){
+    const end = idx + seg.marksCount - 1;
+    if(end < q.marks.length){
+      q.marks[end].boundaryAfter = seg.dividerAfter;
+    }
+    idx += seg.marksCount;
+  }
+}
+
+function deleteSelectedQuestion(){
+  if(state.selectedQIndex === null) return;
+  const q = state.questions[state.selectedQIndex];
+  if(!q) return;
+
+  if(!confirm(`Delete Q${q.qNum}? This removes its structure and tags.`)) return;
+
+  state.questions.splice(state.selectedQIndex, 1);
+  state.selectedQIndex = null;
+  saveState();
+  renderAll();
+}
+
+function exportJSON(){
+  const payload = JSON.stringify({ paper: state.paper, questions: state.questions }, null, 2);
+  const blob = new Blob([payload], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ao-heatmap.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed.paper || !Array.isArray(parsed.questions)) throw new Error("Invalid format.");
+      state.paper = parsed.paper;
+      state.questions = parsed.questions;
+
+      // normalize + rebuild segment plan if missing
+      state.questions.forEach(q=>{
+        q.marks = q.marks ?? [];
+        q.highlight = !!q.highlight;
+        q.structure = q.structure ?? { noParts:true, parts:[] };
+        q.qMarks = Number(q.qMarks || 0);
+        q.segmentPlan = q.segmentPlan && q.segmentPlan.length ? q.segmentPlan : buildSegmentPlan(q);
+        // ensure boundaries consistent
+        rebuildBoundariesForQuestion(q);
+      });
+
+      state.selectedQIndex = null;
+      state.draft.parts = [];
+      saveState();
+      renderAll();
+    }catch(err){
+      alert("Import failed: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetAll(){
+  if(!confirm("Clear everything?")) return;
+  localStorage.removeItem(LS_KEY);
+  state = {
+    paper: { title:"", totalMarks:0, note:"" },
+    questions: [],
+    selectedQIndex: null,
+    kbdAO: null,
+    draft: { parts: [] }
+  };
+  clearDraftParts();
+  renderAll();
+}
+
+/** -------------------------
+ * Wire up events
+ * ------------------------- */
+el("addQuestionBtn").addEventListener("click", addQuestion);
+
+el("paperTitle").addEventListener("input", ()=>{
+  state.paper.title = el("paperTitle").value;
+  saveState(); renderAll();
+});
+el("paperTotal").addEventListener("input", ()=>{
+  state.paper.totalMarks = Number(el("paperTotal").value || 0);
+  saveState(); renderAll();
+});
+el("paperNote").addEventListener("input", ()=>{
+  state.paper.note = el("paperNote").value;
+  saveState(); renderAll();
+});
+
+el("qNoParts").addEventListener("change", updatePartsUI);
+el("partHasSubparts").addEventListener("change", updatePartsUI);
+
+el("nextSubpart").addEventListener("change", ()=>{
+  if(el("nextSubpart").checked){
+    addNextSubpartRow();
+  }
+});
+
+el("subpartsContainer").addEventListener("change", (e)=>{
+  // when a subpart label changes, normalize dropdown options
+  if(e.target && e.target.matches("select[data-sub-index]")){
+    normalizeSubpartDropdownOptions();
+  }
+});
+
+el("addPartBtn").addEventListener("click", ()=>{
+  addDraftPart();
+  renderPartsPreview();
+});
+
+el("clearPartsBtn").addEventListener("click", ()=>{
+  clearDraftParts();
+  renderPartsPreview();
+});
+
+document.querySelectorAll("[data-ao][data-level]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const ao = btn.getAttribute("data-ao");
+    const level = Number(btn.getAttribute("data-level"));
+    tagMark(ao, level);
+  });
+});
+
+el("undoBtn").addEventListener("click", undo);
+el("deleteQuestionBtn").addEventListener("click", deleteSelectedQuestion);
+
+el("exportBtn").addEventListener("click", exportJSON);
+el("importBtn").addEventListener("click", ()=> el("importFile").click());
+el("importFile").addEventListener("change", (e)=>{
+  const f = e.target.files?.[0];
+  if(f) importJSON(f);
+  e.target.value = "";
+});
+el("resetBtn").addEventListener("click", resetAll);
+
+el("printBtn").addEventListener("click", ()=> window.print());
+
+// Keyboard shortcuts: S/U/I then 1/2/3
+window.addEventListener("keydown", (e)=>{
+  const k = e.key.toLowerCase();
+  if(["s","u","i"].includes(k)){
+    state.kbdAO = k.toUpperCase();
+    return;
+  }
+  if(["1","2","3"].includes(k) && state.kbdAO){
+    tagMark(state.kbdAO, Number(k));
+    state.kbdAO = null;
+  }
+});
+
+// keep parts preview updated as qMarks changes
+el("qMarks").addEventListener("input", renderPartsPreview);
+
+// init
+initDropdowns();
+clearDraftParts();
+renderAll();
+</script>
+</body>
+</html>
