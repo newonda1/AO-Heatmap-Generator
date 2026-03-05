@@ -349,10 +349,6 @@
               Current segment: <span class="kbd" id="currentSeg">—</span>
               &nbsp; Remaining: <span class="kbd" id="remaining">—</span>
             </div>
-            <label class="check">
-              <input id="fillRest" type="checkbox" />
-              Fill rest of this segment on click
-            </label>
           </div>
 
           <div class="inline" style="margin-top:10px; gap:8px;">
@@ -918,8 +914,7 @@ function tagMark(ao, level){
     return;
   }
 
-  const fillRest = el("fillRest").checked;
-  const times = fillRest ? state.currentSegment.remaining : 1;
+  const times = 1;
 
   for(let k=0; k<times; k++){
     state.currentSegment.remaining -= 1;
