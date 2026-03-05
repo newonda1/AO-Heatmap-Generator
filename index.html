@@ -745,7 +745,7 @@ function getSubpartsFromUI(){
   const rows = Array.from(container.querySelectorAll("select[data-sub-index], select[data-submarks-index]"));
   // Build by reading pairs
   const subSelects = Array.from(container.querySelectorAll("select[data-sub-index]"));
-  const subMarkSelects = Array.from(container.querySelectorAll("select[data-submarks-index]"));
+  const subMarkSelects = Array.from(container.querySelectorAll("select[data-sub-marks-index]"));
 
   const subs = [];
   for(let i=0;i<subSelects.length;i++){
@@ -1245,7 +1245,7 @@ function addNextSubpartRow(){
 function normalizeSubpartDropdownOptions(){
   const container = el("subpartsContainer");
   const subSelects = Array.from(container.querySelectorAll("select[data-sub-index]"));
-  const subMarkSelects = Array.from(container.querySelectorAll("select[data-submarks-index]"));
+  const subMarkSelects = Array.from(container.querySelectorAll("select[data-sub-marks-index]"));
 
   const current = subSelects.map(s=>s.value);
   const used = new Set(current);
