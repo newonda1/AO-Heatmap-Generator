@@ -346,6 +346,121 @@
       .after-thick{ border-right:3px solid #000 !important; }
       .after-dashed{ border-right:2px dashed #000 !important; }
     }
+    /* -------------------------
+   PRINT STYLES
+------------------------- */
+@media print {
+  /* Force color fills to print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* White paper, remove app background */
+  body {
+    background: #ffffff !important;
+    color: #000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Print ONLY the heatmap + matrix */
+  .card:not(#printArea),
+  h1,
+  .muted:not(#paperMeta) {
+    display: none !important;
+  }
+
+  /* Make the print area full-width and flat */
+  #printArea {
+    display: block !important;
+    width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Make headings look like your sample */
+  #printArea h2 {
+    color: #000 !important;
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    text-align: center !important;
+    margin: 6px 0 8px 0 !important;
+    text-decoration: underline !important;
+  }
+
+  /* Hide the “Print / Save as PDF” button row in print */
+  #printArea .footerRow .inline {
+    display: none !important;
+  }
+
+  /* Put meta centered under title if you want it */
+  #paperMeta {
+    color: #000 !important;
+    text-align: center !important;
+    font-size: 12px !important;
+    margin-bottom: 10px !important;
+  }
+
+  /* Tables: black borders, Word-like spacing */
+  #heatTable, #matrixTable {
+    width: 95% !important;
+    margin: 0 auto !important;
+    border-collapse: collapse !important;
+  }
+
+  #heatTable th, #heatTable td,
+  #matrixTable th, #matrixTable td {
+    border: 2px solid #000 !important;
+    padding: 6px 6px !important;
+    font-size: 12px !important;
+    color: #000 !important;
+  }
+
+  /* Header shading like Word */
+  #heatTable th, #matrixTable th {
+    background: #d9d9d9 !important;
+    font-weight: 800 !important;
+  }
+
+  /* Heatmap cells */
+  #heatTable td.mark, #heatTable td.blank {
+    width: 26px !important;
+    min-width: 26px !important;
+    height: 26px !important;
+    padding: 0 !important;
+    font-weight: 800 !important;
+  }
+
+  /* Keep your L1/L2/L3 colors */
+  #heatTable td.L1, .chip.L1 { background: var(--l1) !important; }
+  #heatTable td.L2, .chip.L2 { background: var(--l2) !important; }
+  #heatTable td.L3, .chip.L3 { background: var(--l3) !important; }
+
+  /* Blue highlight row */
+  #heatTable tr.hl td {
+    background: #b9cbe8 !important; /* Word-ish light blue */
+  }
+
+  /* Thick/dashed dividers need to be BLACK and visible */
+  #heatTable .after-thick { border-right: 4px solid #000 !important; }
+  #heatTable .after-dashed { border-right: 3px dashed #000 !important; }
+
+  /* Add some breathing room between heatmap and matrix */
+  #matrixTable {
+    margin-top: 18px !important;
+  }
+
+  /* Page margins */
+  @page {
+    size: portrait;
+    margin: 12mm;
+  }
+}
   </style>
 </head>
 <body>
@@ -529,7 +644,7 @@
     </div>
 
     <!-- WIDE CARD (SCREEN VIEW) -->
-    <div class="card wide" id="wideCard">
+    <div class="card wide" id="printArea">
       <div class="footerRow noPrint">
         <div>
           <h2 style="margin:0 0 6px 0;">Heat map</h2>
