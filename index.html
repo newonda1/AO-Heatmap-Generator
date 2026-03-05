@@ -261,7 +261,6 @@
       line-height:1.35;
     }
 
-    /* draft part list rows */
     .draftListRow{
       display:flex;
       align-items:center;
@@ -289,6 +288,63 @@
       display:flex;
       gap:8px;
       align-items:center;
+    }
+
+    /* -------------------------
+       PRINT SETTINGS
+       - Only print Heatmap + Matrix
+       - Keep colors
+       ------------------------- */
+    @media print {
+      /* Keep background colors in print */
+      *{
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      body{
+        background:#fff !important;
+        color:#000 !important;
+        padding:0 !important;
+      }
+
+      /* Hide everything by default */
+      .noPrint, .card.left, .card.right, h1, .muted { display:none !important; }
+
+      /* Show print area */
+      #printArea, #printArea *{ display:block; }
+      #printArea{
+        display:block !important;
+        padding:0 !important;
+        margin:0 !important;
+      }
+
+      /* Tighten tables for print */
+      table{ width:100% !important; }
+      th, td{
+        border:1px solid #333 !important;
+        font-size:11px !important;
+      }
+
+      /* Remove shadows and rounding in print */
+      .card{
+        box-shadow:none !important;
+        border:0 !important;
+        border-radius:0 !important;
+        background:transparent !important;
+        padding:0 !important;
+      }
+
+      /* Ensure the blue highlight row prints as tinted */
+      tr.hl td{ background: rgba(24,58,122,0.30) !important; }
+
+      /* Ensure level colors print */
+      td.L1, .chip.L1{ background: var(--l1) !important; color:#111 !important; }
+      td.L2, .chip.L2{ background: var(--l2) !important; color:#111 !important; }
+      td.L3, .chip.L3{ background: var(--l3) !important; color:#111 !important; }
+
+      .after-thick{ border-right:3px solid #000 !important; }
+      .after-dashed{ border-right:2px dashed #000 !important; }
     }
   </style>
 </head>
@@ -472,8 +528,9 @@
       </div>
     </div>
 
-    <div class="card wide">
-      <div class="footerRow">
+    <!-- WIDE CARD (SCREEN VIEW) -->
+    <div class="card wide" id="wideCard">
+      <div class="footerRow noPrint">
         <div>
           <h2 style="margin:0 0 6px 0;">Heat map</h2>
           <div class="muted" id="paperMeta">—</div>
@@ -483,14 +540,22 @@
         </div>
       </div>
 
-      <div style="margin-top:10px; overflow:auto;">
-        <table id="heatTable"></table>
-      </div>
+      <!-- PRINT AREA (this is what prints) -->
+      <div id="printArea">
+        <div style="margin-bottom:10px;">
+          <h2 style="margin:0 0 6px 0; color:#000; display:none;" class="printTitle">Heat map</h2>
+          <div id="paperMetaPrint" style="display:none;"></div>
+        </div>
 
-      <div style="margin-top:18px;">
-        <h2>AO Matrix</h2>
-        <div style="overflow:auto;">
-          <table id="matrixTable"></table>
+        <div style="margin-top:10px; overflow:auto;">
+          <table id="heatTable"></table>
+        </div>
+
+        <div style="margin-top:18px;">
+          <h2 style="margin:0 0 10px 0;" id="matrixHeading">AO Matrix</h2>
+          <div style="overflow:auto;">
+            <table id="matrixTable"></table>
+          </div>
         </div>
       </div>
     </div>
@@ -504,10 +569,7 @@ let state = loadState() ?? {
   questions: [],
   selectedQIndex: null,
   kbdAO: null,
-  draft: {
-    parts: [],
-    editingPartIndex: null
-  }
+  draft: { parts: [], editingPartIndex: null }
 };
 
 const el = (id) => document.getElementById(id);
@@ -546,12 +608,8 @@ function loadState(){
 }
 
 /** helpers */
-function maxMarks(){
-  return Math.max(0, ...state.questions.map(q=>q.marks.length));
-}
-function paperTotalTagged(){
-  return state.questions.reduce((acc,q)=>acc + (q.marks?.length ?? 0), 0);
-}
+function maxMarks(){ return Math.max(0, ...state.questions.map(q=>q.marks.length)); }
+function paperTotalTagged(){ return state.questions.reduce((acc,q)=>acc + (q.marks?.length ?? 0), 0); }
 function aoCounts(){
   const counts = {
     S: {1:0,2:0,3:0, total:0},
@@ -656,6 +714,7 @@ function rebuildSubpartsUI(existing){
 
   if(existing.length === 0){
     container.appendChild(makeSubpartRow(0, "i", 1));
+    normalizeSubpartDropdownOptions();
     return;
   }
 
@@ -695,7 +754,7 @@ function makeSubpartRow(index, label, marks){
   right.appendChild(lab2);
 
   const sel2 = document.createElement("select");
-  sel2.dataset.subMarksIndex = String(index); // becomes data-sub-marks-index
+  sel2.dataset.subMarksIndex = String(index); // data-sub-marks-index
   for(let i=1;i<=10;i++){
     const opt = document.createElement("option");
     opt.value = String(i);
@@ -741,7 +800,6 @@ function addNextSubpartRow(){
   const idx = existing.length;
   container.appendChild(makeSubpartRow(idx, remaining[0], 1));
   el("nextSubpart").checked = false;
-
   normalizeSubpartDropdownOptions();
 }
 
@@ -783,10 +841,15 @@ function renderAll(){
 
   const totalTagged = paperTotalTagged();
   const totalPaper = Number(state.paper.totalMarks || 0);
-  el("paperMeta").textContent =
+  const metaText =
     `${state.paper.title || "Untitled paper"} — tagged marks: ${totalTagged}` +
     (totalPaper ? ` / paper total: ${totalPaper}` : "") +
     (state.paper.note ? ` • Note: ${state.paper.note}` : "");
+
+  el("paperMeta").textContent = metaText;
+
+  const metaPrint = el("paperMetaPrint");
+  if(metaPrint) metaPrint.textContent = metaText;
 }
 
 function renderQuestionList(){
@@ -831,7 +894,6 @@ function renderQuestionList(){
       controls.className = "inline";
       controls.style.gap = "10px";
 
-      // NEW: checkbox moved here
       const cbWrap = document.createElement("label");
       cbWrap.className = "check";
       cbWrap.style.margin = "0";
@@ -1031,7 +1093,7 @@ function renderMatrixTable(){
   t.innerHTML = "";
 
   const counts = aoCounts();
-  const total = counts.total.total;
+  const totalTagged = counts.total.total;
 
   const header = document.createElement("tr");
   ["", "Level 1", "Level 2", "Level 3", "Total", "% within tagged"].forEach(h=>{
@@ -1067,12 +1129,13 @@ function renderMatrixTable(){
     tr.appendChild(tdT);
 
     const tdP = document.createElement("td");
-    tdP.textContent = pct(counts[key].total, total);
+    tdP.textContent = pct(counts[key].total, totalTagged);
     tr.appendChild(tdP);
 
     t.appendChild(tr);
   });
 
+  // totals row
   const trTot = document.createElement("tr");
   const tdLabel = document.createElement("td");
   tdLabel.style.textAlign = "left";
@@ -1095,9 +1158,34 @@ function renderMatrixTable(){
   const tdPct = document.createElement("td");
   tdPct.textContent = "100%";
   trTot.appendChild(tdPct);
-
   t.appendChild(trTot);
 
+  // NEW: percent-by-level row
+  const trLvlPct = document.createElement("tr");
+  const tdLvlLabel = document.createElement("td");
+  tdLvlLabel.style.textAlign = "left";
+  tdLvlLabel.style.fontWeight = "900";
+  tdLvlLabel.textContent = "% by level";
+  trLvlPct.appendChild(tdLvlLabel);
+
+  [1,2,3].forEach(lvl=>{
+    const td = document.createElement("td");
+    td.style.fontWeight = "900";
+    td.textContent = pct(counts.total[lvl], totalTagged);
+    trLvlPct.appendChild(td);
+  });
+
+  const tdBlankTotal = document.createElement("td");
+  tdBlankTotal.textContent = "";
+  trLvlPct.appendChild(tdBlankTotal);
+
+  const tdBlankPct = document.createElement("td");
+  tdBlankPct.textContent = "";
+  trLvlPct.appendChild(tdBlankPct);
+
+  t.appendChild(trLvlPct);
+
+  // note row
   const totalPaper = Number(state.paper.totalMarks || 0);
   const trNote = document.createElement("tr");
   const tdNote = document.createElement("td");
@@ -1139,7 +1227,6 @@ function renderDraftPartsPreviewAndList(){
     box.textContent = lines.join(" • ");
   }
 
-  // list with edit/remove
   state.draft.parts.forEach((p, idx)=>{
     const row = document.createElement("div");
     row.className = "draftListRow";
@@ -1169,16 +1256,13 @@ function renderDraftPartsPreviewAndList(){
     const edit = document.createElement("button");
     edit.className = "btn small";
     edit.textContent = "Edit";
-    edit.addEventListener("click", ()=>{
-      loadDraftPartForEditing(idx);
-    });
+    edit.addEventListener("click", ()=> loadDraftPartForEditing(idx));
 
     const remove = document.createElement("button");
     remove.className = "btn small danger";
     remove.textContent = "Remove";
     remove.addEventListener("click", ()=>{
       state.draft.parts.splice(idx, 1);
-      // if we removed the one being edited, cancel edit mode
       if(state.draft.editingPartIndex === idx){
         cancelEditDraftPart();
       }else if(state.draft.editingPartIndex !== null && state.draft.editingPartIndex > idx){
@@ -1193,7 +1277,6 @@ function renderDraftPartsPreviewAndList(){
 
     row.appendChild(meta);
     row.appendChild(actions);
-
     list.appendChild(row);
   });
 
@@ -1299,7 +1382,6 @@ function addOrSaveDraftPart(){
 
   const editingIdx = state.draft.editingPartIndex;
 
-  // Prevent duplicate labels (except when editing itself)
   const duplicate = state.draft.parts.some((p, idx)=>p.label === label && idx !== editingIdx);
   if(duplicate){
     alert(`Part (${label}) already exists in the draft.`);
@@ -1334,7 +1416,6 @@ function addOrSaveDraftPart(){
   el("subpartsContainer").innerHTML = "";
   el("nextSubpart").checked = false;
 
-  // auto-advance label if not editing
   if(editingIdx === null){
     const used = new Set(state.draft.parts.map(p=>p.label));
     const next = partLabelOptions().find(x=>!used.has(x));
@@ -1391,7 +1472,7 @@ function addQuestion(){
     qNum,
     qMarks,
     desc,
-    highlight: false, // now controlled in the question card
+    highlight: false,
     structure,
     segmentPlan: [],
     marks: []
@@ -1447,7 +1528,6 @@ function tagMark(ao, level){
 
 function rebuildBoundariesForQuestion(q){
   q.marks.forEach(m => m.boundaryAfter = "none");
-
   let idx = 0;
   for(const seg of q.segmentPlan){
     const end = idx + seg.marksCount - 1;
@@ -1556,7 +1636,24 @@ el("paperNote").addEventListener("input", ()=>{
 });
 
 el("qNoParts").addEventListener("change", ()=>renderAll());
-el("partHasSubparts").addEventListener("change", ()=>renderAll());
+
+/* CHANGE #1: when subparts is checked, auto-create the (i) row immediately */
+el("partHasSubparts").addEventListener("change", ()=>{
+  const checked = el("partHasSubparts").checked;
+  if(checked){
+    el("subpartsBuilder").style.display = "block";
+    // If empty, immediately insert (i)
+    if(el("subpartsContainer").children.length === 0){
+      rebuildSubpartsUI([]); // auto adds (i)
+    }
+  }else{
+    // Turning off subparts clears any subpart rows for cleanliness
+    el("subpartsBuilder").style.display = "none";
+    el("subpartsContainer").innerHTML = "";
+    el("nextSubpart").checked = false;
+  }
+  renderAll();
+});
 
 el("nextSubpart").addEventListener("change", ()=>{
   if(el("nextSubpart").checked){
@@ -1573,9 +1670,7 @@ el("subpartsContainer").addEventListener("change", (e)=>{
 el("addOrSavePartBtn").addEventListener("click", addOrSaveDraftPart);
 el("cancelEditPartBtn").addEventListener("click", cancelEditDraftPart);
 
-el("clearPartsBtn").addEventListener("click", ()=>{
-  clearDraftParts();
-});
+el("clearPartsBtn").addEventListener("click", clearDraftParts);
 
 document.querySelectorAll("[data-ao][data-level]").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -1612,9 +1707,7 @@ window.addEventListener("keydown", (e)=>{
 });
 
 // keep validation current
-el("qMarks").addEventListener("input", ()=>{
-  renderDraftPartsPreviewAndList();
-});
+el("qMarks").addEventListener("input", renderDraftPartsPreviewAndList);
 
 // init
 initDropdowns();
