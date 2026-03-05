@@ -138,10 +138,10 @@
       background: rgba(255,255,255,0.03);
     }
 
-    .S{ background:var(--s); }
-    .U{ background:var(--u); }
-    .I{ background:var(--i); }
-
+    .L1{ background:var(--s); }  /* green */
+    .L2{ background:var(--u); }  /* yellow */
+    .L3{ background:var(--i); }  /* red */
+    
     /* dividers after a mark */
     .after-thick{ border-right:3px solid #000 !important; }
     .after-dashed{ border-right:2px dashed #000 !important; }
@@ -623,7 +623,7 @@ function renderEditor(){
   }else{
     q.marks.forEach((m)=>{
       const c = document.createElement("div");
-      c.className = `chip ${m.ao} ${boundaryClass(m.boundaryAfter)}`;
+      c.className = `chip L${m.level} ${boundaryClass(m.boundaryAfter)}`;
       c.textContent = m.ao + m.level;
       strip.appendChild(c);
     });
@@ -723,7 +723,7 @@ function renderHeatTable(){
       if(i < marks.length){
         const m = marks[i];
         const td = document.createElement("td");
-        td.className = `mark ${m.ao} ${boundaryClass(m.boundaryAfter)}`;
+        td.className = `mark L${m.level} ${boundaryClass(m.boundaryAfter)}`;
         td.title = `${m.ao}${m.level}`;
         td.textContent = m.ao; // keep it clean like your Word heatmap
         tr.appendChild(td);
