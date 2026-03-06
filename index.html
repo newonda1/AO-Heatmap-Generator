@@ -510,8 +510,8 @@
           <input id="importFile" type="file" accept="application/json" style="display:none;" />
           <button class="btn small danger" id="resetBtn">Reset (clear everything)</button>
         </div>
+        <div class="muted" id="backupStatus" style="margin-top:8px;">Automatic backup file: not created yet.</div>
       </div>
-    </div>
 
     <div class="card right">
       <h2>Editor</h2>
@@ -585,10 +585,10 @@
       </div>
 
       <!-- PRINT AREA (this is what prints) -->
-      <div id="printArea">
+      <div id="printContent">
         <div style="margin-bottom:10px;">
-          <h2 style="margin:0 0 6px 0; color:#000; display:none;" class="printTitle">Heat map</h2>
-          <div id="paperMetaPrint" style="display:none;"></div>
+          <h2 style="margin:0 0 6px 0; color:#000;" class="printTitle">Heat map</h2>
+          <div id="paperMetaPrint"></div>
         </div>
 
         <div style="margin-top:10px; overflow:auto;">
@@ -607,6 +607,7 @@
 
 <script>
 const LS_KEY = "ao_heatmap_v2";
+const BACKUP_KEY = "ao_heatmap_backup_download_v1";
 
 let state = loadState() ?? {
   paper: { title:"", totalMarks:0, note:"" },
@@ -619,10 +620,13 @@ let state = loadState() ?? {
 const el = (id) => document.getElementById(id);
 
 function saveState(){
-  localStorage.setItem(LS_KEY, JSON.stringify({
+  const payload = {
     paper: state.paper,
     questions: state.questions
-  }));
+  };
+
+  localStorage.setItem(LS_KEY, JSON.stringify(payload));
+  autoSaveBackup(payload);
 }
 
 function loadState(){
@@ -648,6 +652,41 @@ function loadState(){
   }catch(e){
     console.warn("Failed to load state:", e);
     return null;
+  }
+}
+
+function autoSaveBackup(payload){
+  try{
+    const serialized = JSON.stringify(payload, null, 2);
+    const lastSaved = localStorage.getItem(BACKUP_KEY);
+
+    if(lastSaved === serialized){
+      updateBackupStatus("Automatic backup: up to date.");
+      return;
+    }
+
+    const stamp = new Date();
+    const yyyy = stamp.getFullYear();
+    const mm = String(stamp.getMonth() + 1).padStart(2, "0");
+    const dd = String(stamp.getDate()).padStart(2, "0");
+    const hh = String(stamp.getHours()).padStart(2, "0");
+    const min = String(stamp.getMinutes()).padStart(2, "0");
+
+    localStorage.setItem(BACKUP_KEY, serialized);
+
+    updateBackupStatus(
+      `Automatic backup saved locally (${yyyy}-${mm}-${dd} ${hh}:${min})`
+    );
+  }catch(err){
+    console.warn("Auto backup failed:", err);
+    updateBackupStatus("Automatic backup failed.");
+  }
+}
+
+function updateBackupStatus(message){
+  const elStatus = document.getElementById("backupStatus");
+  if(elStatus){
+    elStatus.textContent = message;
   }
 }
 
@@ -894,6 +933,12 @@ function renderAll(){
 
   const metaPrint = el("paperMetaPrint");
   if(metaPrint) metaPrint.textContent = metaText;
+
+  updateBackupStatus(
+    localStorage.getItem(BACKUP_KEY)
+      ? "Automatic backup file: up to date."
+      : "Automatic backup file: not created yet."
+  );
 }
 
 function renderQuestionList(){
@@ -1640,6 +1685,7 @@ function importJSON(file){
       state.selectedQIndex = null;
       state.draft.parts = [];
       state.draft.editingPartIndex = null;
+      localStorage.removeItem(BACKUP_KEY);
       saveState();
       renderAll();
     }catch(err){
@@ -1652,6 +1698,7 @@ function importJSON(file){
 function resetAll(){
   if(!confirm("Clear everything?")) return;
   localStorage.removeItem(LS_KEY);
+  localStorage.removeItem(BACKUP_KEY);
   state = {
     paper: { title:"", totalMarks:0, note:"" },
     questions: [],
