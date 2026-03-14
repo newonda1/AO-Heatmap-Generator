@@ -173,6 +173,11 @@
       color:#111;
       border:1px solid rgba(0,0,0,0.25);
       position:relative;
+      cursor:pointer;
+    }
+    .chip.selected{
+      outline:3px solid #ffffff;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.45);
     }
     .chip.after-thick::after{
       content:"";
@@ -561,6 +566,9 @@
           <div class="muted" style="margin-top:10px;">
             Optional keyboard speed-up: <span class="kbd">S</span>/<span class="kbd">U</span>/<span class="kbd">I</span> then <span class="kbd">1</span>/<span class="kbd">2</span>/<span class="kbd">3</span>.
           </div>
+          <div class="muted" style="margin-top:8px;" id="editModeStatus">
+            Click a tag in the preview to edit it individually.
+          </div>
 
           <div style="margin-top:10px;">
             <div class="muted">Preview (current question marks)</div>
@@ -616,6 +624,7 @@ let state = loadState() ?? {
   paper: { title:"", totalMarks:0, note:"" },
   questions: [],
   selectedQIndex: null,
+  selectedMarkIndex: null,
   kbdAO: null,
   draft: { parts: [], editingPartIndex: null }
 };
@@ -649,6 +658,7 @@ function loadState(){
       paper: parsed.paper,
       questions: parsed.questions,
       selectedQIndex: null,
+      selectedMarkIndex: null,
       kbdAO: null,
       draft: { parts: [], editingPartIndex: null }
     };
@@ -1013,6 +1023,7 @@ function renderQuestionList(){
       btn.addEventListener("click", (e)=>{
         e.stopPropagation();
         state.selectedQIndex = idx;
+        state.selectedMarkIndex = null;
         saveState();
         renderAll();
       });
@@ -1025,6 +1036,7 @@ function renderQuestionList(){
 
       row.addEventListener("click", ()=>{
         state.selectedQIndex = idx;
+        state.selectedMarkIndex = null;
         saveState();
         renderAll();
       });
@@ -1080,12 +1092,31 @@ function renderEditor(){
     d.textContent = "No marks tagged yet.";
     strip.appendChild(d);
   }else{
-    q.marks.forEach((m)=>{
+    q.marks.forEach((m, idx)=>{
       const c = document.createElement("div");
       c.className = `chip L${m.level} ${boundaryClass(m.boundaryAfter)}`;
+      if(state.selectedMarkIndex === idx) c.classList.add("selected");
       c.textContent = m.ao + m.level;
+      c.title = `Tag ${idx + 1}: ${m.ao}${m.level}`;
+      c.addEventListener("click", ()=>{
+        state.selectedMarkIndex = idx;
+        renderAll();
+      });
       strip.appendChild(c);
     });
+  }
+
+  const editModeStatus = el("editModeStatus");
+  if(editModeStatus){
+    if(state.selectedMarkIndex === null){
+      editModeStatus.textContent = "Click a tag in the preview to edit it individually.";
+    }else if(q.marks[state.selectedMarkIndex]){
+      const selected = q.marks[state.selectedMarkIndex];
+      editModeStatus.textContent = `Editing tag ${state.selectedMarkIndex + 1}: ${selected.ao}${selected.level}. Click any S/U/I level button to replace it.`;
+    }else{
+      state.selectedMarkIndex = null;
+      editModeStatus.textContent = "Click a tag in the preview to edit it individually.";
+    }
   }
 
   const spl = el("segmentPlanList");
@@ -1574,6 +1605,7 @@ function addQuestion(){
 
   state.questions.push(newQ);
   state.selectedQIndex = state.questions.findIndex(q=>q.qNum===qNum);
+  state.selectedMarkIndex = null;
 
   el("qNum").value = "";
   el("qMarks").value = "";
@@ -1589,6 +1621,14 @@ function addQuestion(){
 function tagMark(ao, level){
   const q = requireSelectedQuestion();
   if(!q) return;
+
+  if(state.selectedMarkIndex !== null && q.marks[state.selectedMarkIndex]){
+    q.marks[state.selectedMarkIndex].ao = ao;
+    q.marks[state.selectedMarkIndex].level = level;
+    saveState();
+    renderAll();
+    return;
+  }
 
   const tagged = q.marks.length;
   let segIndex = 0;
@@ -1638,6 +1678,11 @@ function undo(){
     return;
   }
   q.marks.pop();
+  if(state.selectedMarkIndex !== null){
+    if(state.selectedMarkIndex >= q.marks.length){
+      state.selectedMarkIndex = null;
+    }
+  }
   rebuildBoundariesForQuestion(q);
   saveState();
   renderAll();
@@ -1652,6 +1697,7 @@ function deleteSelectedQuestion(){
 
   state.questions.splice(state.selectedQIndex, 1);
   state.selectedQIndex = null;
+  state.selectedMarkIndex = null;
   saveState();
   renderAll();
 }
@@ -1686,6 +1732,7 @@ function importJSON(file){
       });
 
       state.selectedQIndex = null;
+      state.selectedMarkIndex = null;
       state.draft.parts = [];
       state.draft.editingPartIndex = null;
       localStorage.removeItem(BACKUP_KEY);
@@ -1706,6 +1753,7 @@ function resetAll(){
     paper: { title:"", totalMarks:0, note:"" },
     questions: [],
     selectedQIndex: null,
+    selectedMarkIndex: null,
     kbdAO: null,
     draft: { parts: [], editingPartIndex: null }
   };
