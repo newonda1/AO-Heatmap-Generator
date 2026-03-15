@@ -422,6 +422,29 @@
       </div>
 
       <div class="segList" style="margin-top:14px;">
+        <h2 style="margin:0;">Paper library</h2>
+        <div class="grid" style="margin-top:8px;">
+          <div>
+            <label>Saved papers</label>
+            <select id="savedPaperSelect">
+              <option value="">No saved papers</option>
+            </select>
+          </div>
+          <div>
+            <label>Save current paper as</label>
+            <input id="savePaperName" placeholder="e.g., AA SL Paper 1 Draft A" />
+          </div>
+        </div>
+        <div class="inline" style="margin-top:10px;">
+          <button class="btn small" id="savePaperBtn">Save current paper</button>
+          <button class="btn small" id="loadPaperBtn">Load selected paper</button>
+          <button class="btn small danger" id="deletePaperBtn">Delete selected paper</button>
+          <button class="btn small" id="newPaperBtn">Start new blank paper</button>
+        </div>
+        <div class="muted" id="libraryStatus" style="margin-top:8px;">Current paper is only in the working area until you save it.</div>
+      </div>
+
+      <div class="segList" style="margin-top:14px;">
         <h2 style="margin:0;">Add a question</h2>
 
         <div class="grid3">
@@ -619,12 +642,14 @@
 <script>
 const LS_KEY = "ao_heatmap_v2";
 const BACKUP_KEY = "ao_heatmap_backup_download_v1";
+const PAPERS_KEY = "ao_heatmap_saved_papers_v1";
 
 let state = loadState() ?? {
   paper: { title:"", totalMarks:0, note:"" },
   questions: [],
   selectedQIndex: null,
   selectedMarkIndex: null,
+  currentSavedPaperName: null,
   kbdAO: null,
   draft: { parts: [], editingPartIndex: null }
 };
@@ -634,7 +659,8 @@ const el = (id) => document.getElementById(id);
 function saveState(){
   const payload = {
     paper: state.paper,
-    questions: state.questions
+    questions: state.questions,
+    currentSavedPaperName: state.currentSavedPaperName
   };
 
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
@@ -659,6 +685,7 @@ function loadState(){
       questions: parsed.questions,
       selectedQIndex: null,
       selectedMarkIndex: null,
+      currentSavedPaperName: parsed.currentSavedPaperName ?? null,
       kbdAO: null,
       draft: { parts: [], editingPartIndex: null }
     };
@@ -701,6 +728,159 @@ function updateBackupStatus(message){
   if(elStatus){
     elStatus.textContent = message;
   }
+}
+
+function getSavedPapers(){
+  try{
+    const raw = localStorage.getItem(PAPERS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  }catch(err){
+    console.warn("Failed to read saved papers:", err);
+    return {};
+  }
+}
+
+function setSavedPapers(papers){
+  localStorage.setItem(PAPERS_KEY, JSON.stringify(papers));
+}
+
+function makePaperSnapshot(){
+  return JSON.parse(JSON.stringify({
+    paper: state.paper,
+    questions: state.questions
+  }));
+}
+
+function loadSnapshotIntoState(snapshot, savedName = null){
+  state.paper = snapshot.paper ?? { title:"", totalMarks:0, note:"" };
+  state.questions = Array.isArray(snapshot.questions) ? snapshot.questions : [];
+
+  state.questions.forEach(q=>{
+    q.marks = q.marks ?? [];
+    q.highlight = !!q.highlight;
+    q.structure = q.structure ?? { noParts:true, parts:[] };
+    q.qMarks = Number(q.qMarks || 0);
+    q.segmentPlan = q.segmentPlan && q.segmentPlan.length ? q.segmentPlan : buildSegmentPlan(q);
+    rebuildBoundariesForQuestion(q);
+  });
+
+  state.selectedQIndex = null;
+  state.selectedMarkIndex = null;
+  state.currentSavedPaperName = savedName;
+  state.draft.parts = [];
+  state.draft.editingPartIndex = null;
+  clearDraftParts();
+}
+
+function renderSavedPapersDropdown(){
+  const sel = el("savedPaperSelect");
+  if(!sel) return;
+
+  const papers = getSavedPapers();
+  const names = Object.keys(papers).sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML = "";
+
+  if(names.length === 0){
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No saved papers";
+    sel.appendChild(opt);
+    return;
+  }
+
+  names.forEach(name=>{
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if(state.currentSavedPaperName === name) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function updateLibraryStatus(message){
+  const status = el("libraryStatus");
+  if(status) status.textContent = message;
+}
+
+function saveCurrentPaperToLibrary(){
+  const input = el("savePaperName");
+  const name = (input?.value || state.paper.title || "").trim();
+  if(!name){
+    alert("Enter a name for the saved paper.");
+    return;
+  }
+
+  const papers = getSavedPapers();
+  papers[name] = makePaperSnapshot();
+  setSavedPapers(papers);
+
+  state.currentSavedPaperName = name;
+  saveState();
+  renderSavedPapersDropdown();
+  if(input) input.value = name;
+  updateLibraryStatus(`Saved current paper as “${name}”.`);
+}
+
+function loadSelectedPaperFromLibrary(){
+  const sel = el("savedPaperSelect");
+  const name = sel?.value || "";
+  if(!name){
+    alert("Choose a saved paper to load.");
+    return;
+  }
+
+  const papers = getSavedPapers();
+  const snapshot = papers[name];
+  if(!snapshot){
+    alert("That saved paper could not be found.");
+    renderSavedPapersDropdown();
+    return;
+  }
+
+  loadSnapshotIntoState(JSON.parse(JSON.stringify(snapshot)), name);
+  saveState();
+  renderAll();
+  updateLibraryStatus(`Loaded saved paper “${name}”.`);
+}
+
+function deleteSelectedPaperFromLibrary(){
+  const sel = el("savedPaperSelect");
+  const name = sel?.value || "";
+  if(!name){
+    alert("Choose a saved paper to delete.");
+    return;
+  }
+
+  if(!confirm(`Delete saved paper “${name}”?`)) return;
+
+  const papers = getSavedPapers();
+  delete papers[name];
+  setSavedPapers(papers);
+
+  if(state.currentSavedPaperName === name){
+    state.currentSavedPaperName = null;
+    saveState();
+  }
+
+  renderSavedPapersDropdown();
+  updateLibraryStatus(`Deleted saved paper “${name}”.`);
+}
+
+function startNewBlankPaper(){
+  if(!confirm("Start a new blank paper? Unsaved changes to the current working paper will remain only in the working area unless you save them first.")) return;
+
+  state.paper = { title:"", totalMarks:0, note:"" };
+  state.questions = [];
+  state.selectedQIndex = null;
+  state.selectedMarkIndex = null;
+  state.currentSavedPaperName = null;
+  state.draft.parts = [];
+  state.draft.editingPartIndex = null;
+  clearDraftParts();
+  saveState();
+  renderAll();
+  updateLibraryStatus("Started a new blank paper. Save it when you are ready.");
 }
 
 /** helpers */
@@ -926,6 +1106,13 @@ function renderAll(){
   el("paperTotal").value = state.paper.totalMarks ?? 0;
   el("paperNote").value = state.paper.note ?? "";
 
+  const saveNameInput = el("savePaperName");
+  if(saveNameInput){
+    saveNameInput.value = state.currentSavedPaperName ?? state.paper.title ?? "";
+  }
+
+  renderSavedPapersDropdown();
+
   el("partsBuilder").style.display = el("qNoParts").checked ? "none" : "block";
   el("subpartsBuilder").style.display = el("partHasSubparts").checked ? "block" : "none";
 
@@ -951,6 +1138,12 @@ function renderAll(){
     localStorage.getItem(BACKUP_KEY)
       ? "Automatic backup: up to date."
       : "Automatic backup: not created yet."
+  );
+
+  updateLibraryStatus(
+    state.currentSavedPaperName
+      ? `Currently working on saved paper “${state.currentSavedPaperName}”.`
+      : "Current paper is only in the working area until you save it."
   );
 }
 
@@ -1754,6 +1947,7 @@ function resetAll(){
     questions: [],
     selectedQIndex: null,
     selectedMarkIndex: null,
+    currentSavedPaperName: null,
     kbdAO: null,
     draft: { parts: [], editingPartIndex: null }
   };
@@ -1763,6 +1957,10 @@ function resetAll(){
 
 /** events */
 el("addQuestionBtn").addEventListener("click", addQuestion);
+el("savePaperBtn").addEventListener("click", saveCurrentPaperToLibrary);
+el("loadPaperBtn").addEventListener("click", loadSelectedPaperFromLibrary);
+el("deletePaperBtn").addEventListener("click", deleteSelectedPaperFromLibrary);
+el("newPaperBtn").addEventListener("click", startNewBlankPaper);
 
 el("paperTitle").addEventListener("input", ()=>{
   state.paper.title = el("paperTitle").value;
@@ -1775,6 +1973,15 @@ el("paperTotal").addEventListener("input", ()=>{
 el("paperNote").addEventListener("input", ()=>{
   state.paper.note = el("paperNote").value;
   saveState(); renderAll();
+});
+
+el("savedPaperSelect").addEventListener("change", ()=>{
+  const sel = el("savedPaperSelect");
+  if(sel && sel.value){
+    updateLibraryStatus(`Selected saved paper “${sel.value}”. Click “Load selected paper” to open it.`);
+  }else{
+    updateLibraryStatus("Current paper is only in the working area until you save it.");
+  }
 });
 
 el("qNoParts").addEventListener("change", ()=>renderAll());
