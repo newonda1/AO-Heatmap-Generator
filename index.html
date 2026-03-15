@@ -1365,7 +1365,12 @@ function renderEditor(){
       c.textContent = m.ao + m.level;
       c.title = `Tag ${idx + 1}: ${m.ao}${m.level}`;
       c.addEventListener("click", ()=>{
-        state.selectedMarkIndex = idx;
+        // If clicking the same tag again, exit edit mode
+        if(state.selectedMarkIndex === idx){
+          state.selectedMarkIndex = null;
+        }else{
+          state.selectedMarkIndex = idx;
+        }
         renderAll();
       });
       strip.appendChild(c);
