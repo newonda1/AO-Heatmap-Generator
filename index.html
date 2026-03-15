@@ -220,6 +220,14 @@
       border-radius:12px;
       padding:10px;
     }
+    .segRow.dragging{
+      opacity:0.55;
+      border-style:dashed;
+    }
+    .segRow.drop-target{
+      outline:2px dashed rgba(168,230,163,0.85);
+      outline-offset:2px;
+    }
     .segRow .left{
       display:flex; flex-direction:column; gap:2px;
     }
@@ -650,6 +658,7 @@ let state = loadState() ?? {
   selectedQIndex: null,
   selectedMarkIndex: null,
   currentSavedPaperName: null,
+  dragQuestionIndex: null,
   kbdAO: null,
   draft: { parts: [], editingPartIndex: null }
 };
@@ -680,12 +689,13 @@ function loadState(){
       q.structure = q.structure ?? { noParts:true, parts:[] };
       q.highlight = !!q.highlight;
     });
-    return {
+      return {
       paper: parsed.paper,
       questions: parsed.questions,
       selectedQIndex: null,
       selectedMarkIndex: null,
       currentSavedPaperName: parsed.currentSavedPaperName ?? null,
+      dragQuestionIndex: null,
       kbdAO: null,
       draft: { parts: [], editingPartIndex: null }
     };
@@ -768,6 +778,7 @@ function loadSnapshotIntoState(snapshot, savedName = null){
   state.selectedQIndex = null;
   state.selectedMarkIndex = null;
   state.currentSavedPaperName = savedName;
+  state.dragQuestionIndex = null;
   state.draft.parts = [];
   state.draft.editingPartIndex = null;
   clearDraftParts();
@@ -801,6 +812,36 @@ function renderSavedPapersDropdown(){
 function updateLibraryStatus(message){
   const status = el("libraryStatus");
   if(status) status.textContent = message;
+}
+
+function moveQuestion(fromIndex, toIndex){
+  if(fromIndex === toIndex) return;
+  if(fromIndex === null || toIndex === null) return;
+  if(fromIndex < 0 || toIndex < 0) return;
+  if(fromIndex >= state.questions.length || toIndex >= state.questions.length) return;
+
+  const moved = state.questions.splice(fromIndex, 1)[0];
+  state.questions.splice(toIndex, 0, moved);
+
+  if(state.selectedQIndex === fromIndex){
+    state.selectedQIndex = toIndex;
+  }else if(state.selectedQIndex !== null){
+    if(fromIndex < state.selectedQIndex && toIndex >= state.selectedQIndex){
+      state.selectedQIndex -= 1;
+    }else if(fromIndex > state.selectedQIndex && toIndex <= state.selectedQIndex){
+      state.selectedQIndex += 1;
+    }
+  }
+
+  state.selectedMarkIndex = null;
+  saveState();
+  renderAll();
+}
+
+function handleQuestionDrop(targetIndex){
+  if(state.dragQuestionIndex === null) return;
+  moveQuestion(state.dragQuestionIndex, targetIndex);
+  state.dragQuestionIndex = null;
 }
 
 function saveCurrentPaperToLibrary(){
@@ -875,6 +916,7 @@ function startNewBlankPaper(){
   state.selectedQIndex = null;
   state.selectedMarkIndex = null;
   state.currentSavedPaperName = null;
+  state.dragQuestionIndex = null;
   state.draft.parts = [];
   state.draft.editingPartIndex = null;
   clearDraftParts();
@@ -1159,83 +1201,114 @@ function renderQuestionList(){
     return;
   }
 
-  state.questions
-    .slice()
-    .sort((a,b)=>a.qNum - b.qNum)
-    .forEach((q) => {
-      const idx = state.questions.indexOf(q);
+  state.questions.forEach((q, idx) => {
+    const row = document.createElement("div");
+    row.className = "segRow";
+    row.style.cursor = "grab";
+    row.draggable = true;
+    row.dataset.questionIndex = String(idx);
 
-      const row = document.createElement("div");
-      row.className = "segRow";
-      row.style.cursor = "pointer";
-      if(idx === state.selectedQIndex){
-        row.style.outline = "2px solid rgba(168,230,163,0.5)";
-      }
+    if(idx === state.selectedQIndex){
+      row.style.outline = "2px solid rgba(168,230,163,0.5)";
+    }
 
-      const left = document.createElement("div");
-      left.className = "left";
-      const title = document.createElement("div");
-      title.className = "title";
-      title.textContent = `Q${q.qNum} — ${q.desc || "(no description)"}`;
-      const sub = document.createElement("div");
-      sub.className = "sub";
-      sub.textContent =
-        `${q.marks.length} tagged / ${q.qMarks} total • ${q.segmentPlan.length} segments` +
-        (q.highlight ? " • common" : "");
-      left.appendChild(title);
-      left.appendChild(sub);
+    const left = document.createElement("div");
+    left.className = "left";
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = `Q${q.qNum} — ${q.desc || "(no description)"}`;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent =
+      `${q.marks.length} tagged / ${q.qMarks} total • ${q.segmentPlan.length} segments` +
+      (q.highlight ? " • common" : "") +
+      " • drag to reorder";
+    left.appendChild(title);
+    left.appendChild(sub);
 
-      const controls = document.createElement("div");
-      controls.className = "inline";
-      controls.style.gap = "10px";
+    const controls = document.createElement("div");
+    controls.className = "inline";
+    controls.style.gap = "10px";
 
-      const cbWrap = document.createElement("label");
-      cbWrap.className = "check";
-      cbWrap.style.margin = "0";
-      cbWrap.style.whiteSpace = "nowrap";
+    const cbWrap = document.createElement("label");
+    cbWrap.className = "check";
+    cbWrap.style.margin = "0";
+    cbWrap.style.whiteSpace = "nowrap";
 
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = !!q.highlight;
-      cb.addEventListener("click", (e)=> e.stopPropagation());
-      cb.addEventListener("change", ()=>{
-        q.highlight = cb.checked;
-        saveState();
-        renderAll();
-      });
-
-      const cbText = document.createElement("span");
-      cbText.textContent = "Highlight as common question";
-
-      cbWrap.appendChild(cb);
-      cbWrap.appendChild(cbText);
-
-      const btn = document.createElement("button");
-      btn.className = "btn small";
-      btn.textContent = "Edit";
-      btn.addEventListener("click", (e)=>{
-        e.stopPropagation();
-        state.selectedQIndex = idx;
-        state.selectedMarkIndex = null;
-        saveState();
-        renderAll();
-      });
-
-      controls.appendChild(cbWrap);
-      controls.appendChild(btn);
-
-      row.appendChild(left);
-      row.appendChild(controls);
-
-      row.addEventListener("click", ()=>{
-        state.selectedQIndex = idx;
-        state.selectedMarkIndex = null;
-        saveState();
-        renderAll();
-      });
-
-      wrap.appendChild(row);
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!q.highlight;
+    cb.addEventListener("click", (e)=> e.stopPropagation());
+    cb.addEventListener("change", ()=>{
+      q.highlight = cb.checked;
+      saveState();
+      renderAll();
     });
+
+    const cbText = document.createElement("span");
+    cbText.textContent = "Highlight as common question";
+
+    cbWrap.appendChild(cb);
+    cbWrap.appendChild(cbText);
+
+    const btn = document.createElement("button");
+    btn.className = "btn small";
+    btn.textContent = "Edit";
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      state.selectedQIndex = idx;
+      state.selectedMarkIndex = null;
+      saveState();
+      renderAll();
+    });
+
+    controls.appendChild(cbWrap);
+    controls.appendChild(btn);
+
+    row.appendChild(left);
+    row.appendChild(controls);
+
+    row.addEventListener("click", ()=>{
+      state.selectedQIndex = idx;
+      state.selectedMarkIndex = null;
+      saveState();
+      renderAll();
+    });
+
+    row.addEventListener("dragstart", (e)=>{
+      state.dragQuestionIndex = idx;
+      row.classList.add("dragging");
+      if(e.dataTransfer){
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(idx));
+      }
+    });
+
+    row.addEventListener("dragend", ()=>{
+      state.dragQuestionIndex = null;
+      row.classList.remove("dragging");
+      wrap.querySelectorAll(".segRow").forEach(r => r.classList.remove("drop-target"));
+    });
+
+    row.addEventListener("dragover", (e)=>{
+      e.preventDefault();
+      if(state.dragQuestionIndex === null || state.dragQuestionIndex === idx) return;
+      row.classList.add("drop-target");
+      if(e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    });
+
+    row.addEventListener("dragleave", ()=>{
+      row.classList.remove("drop-target");
+    });
+
+    row.addEventListener("drop", (e)=>{
+      e.preventDefault();
+      row.classList.remove("drop-target");
+      handleQuestionDrop(idx);
+    });
+
+    wrap.appendChild(row);
+  });
 }
 
 function renderEditor(){
@@ -1359,7 +1432,7 @@ function renderHeatTable(){
   trh.appendChild(thMarks);
   t.appendChild(trh);
 
-  const sorted = state.questions.slice().sort((a,b)=>a.qNum-b.qNum);
+  const sorted = state.questions.slice();
   for(const q of sorted){
     const tr = document.createElement("tr");
     if(q.highlight) tr.classList.add("hl");
@@ -1948,6 +2021,7 @@ function resetAll(){
     selectedQIndex: null,
     selectedMarkIndex: null,
     currentSavedPaperName: null,
+    dragQuestionIndex: null,
     kbdAO: null,
     draft: { parts: [], editingPartIndex: null }
   };
