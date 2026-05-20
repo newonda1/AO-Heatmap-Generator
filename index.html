@@ -449,6 +449,11 @@
           <button class="btn small danger" id="deletePaperBtn">Delete selected paper</button>
           <button class="btn small" id="newPaperBtn">Start new blank paper</button>
         </div>
+        <div class="inline" style="margin-top:10px;">
+          <button class="btn small" id="exportLibraryBtn">Save library to file</button>
+          <button class="btn small" id="importLibraryBtn">Load library from file</button>
+          <input id="importLibraryFile" type="file" accept="application/json,.json" style="display:none;" />
+        </div>
         <div class="muted" id="libraryStatus" style="margin-top:8px;">Current paper is only in the working area until you save it.</div>
       </div>
 
@@ -652,6 +657,7 @@
 const LS_KEY = "ao_heatmap_v2";
 const BACKUP_KEY = "ao_heatmap_backup_download_v1";
 const PAPERS_KEY = "ao_heatmap_saved_papers_v1";
+const LIBRARY_FILE_TYPE = "ao-heatmap-paper-library";
 
 let state = loadState() ?? {
   paper: { title:"", totalMarks:0, note:"" },
@@ -763,18 +769,42 @@ function makePaperSnapshot(){
   }));
 }
 
-function loadSnapshotIntoState(snapshot, savedName = null){
-  state.paper = snapshot.paper ?? { title:"", totalMarks:0, note:"" };
-  state.questions = Array.isArray(snapshot.questions) ? snapshot.questions : [];
+function normalizePaperSnapshot(snapshot){
+  if(!snapshot || typeof snapshot !== "object"){
+    throw new Error("Missing paper data.");
+  }
+  if(!snapshot.paper || !Array.isArray(snapshot.questions)){
+    throw new Error("Paper data must include a paper setup and questions array.");
+  }
 
-  state.questions.forEach(q=>{
-    q.marks = q.marks ?? [];
+  const normalized = JSON.parse(JSON.stringify({
+    paper: snapshot.paper,
+    questions: snapshot.questions
+  }));
+
+  normalized.paper = normalized.paper ?? { title:"", totalMarks:0, note:"" };
+  normalized.paper.title = normalized.paper.title ?? "";
+  normalized.paper.totalMarks = Number(normalized.paper.totalMarks || 0);
+  normalized.paper.note = normalized.paper.note ?? "";
+
+  normalized.questions.forEach(q=>{
+    q.qNum = Number(q.qNum || 0);
+    q.qMarks = Number(q.qMarks || 0);
+    q.desc = q.desc ?? "";
+    q.marks = Array.isArray(q.marks) ? q.marks : [];
     q.highlight = !!q.highlight;
     q.structure = q.structure ?? { noParts:true, parts:[] };
-    q.qMarks = Number(q.qMarks || 0);
     q.segmentPlan = q.segmentPlan && q.segmentPlan.length ? q.segmentPlan : buildSegmentPlan(q);
     rebuildBoundariesForQuestion(q);
   });
+
+  return normalized;
+}
+
+function loadSnapshotIntoState(snapshot, savedName = null){
+  const normalized = normalizePaperSnapshot(snapshot);
+  state.paper = normalized.paper;
+  state.questions = normalized.questions;
 
   state.selectedQIndex = null;
   state.selectedMarkIndex = null;
@@ -924,6 +954,159 @@ function startNewBlankPaper(){
   saveState();
   renderAll();
   updateLibraryStatus("Started a new blank paper. Save it when you are ready.");
+}
+
+function paperSnapshotHasContent(snapshot){
+  return !!(
+    snapshot?.paper?.title ||
+    snapshot?.paper?.note ||
+    Number(snapshot?.paper?.totalMarks || 0) ||
+    (snapshot?.questions?.length ?? 0)
+  );
+}
+
+function uniquePaperName(baseName, papers){
+  const base = (baseName || "Current paper").trim() || "Current paper";
+  if(!papers[base]) return base;
+
+  let n = 2;
+  let candidate = `${base} (${n})`;
+  while(papers[candidate]){
+    n += 1;
+    candidate = `${base} (${n})`;
+  }
+  return candidate;
+}
+
+function makeLibraryFilePayload(){
+  const savedPapers = JSON.parse(JSON.stringify(getSavedPapers()));
+  const currentPaper = makePaperSnapshot();
+  let currentSavedPaperName = state.currentSavedPaperName ?? null;
+
+  if(paperSnapshotHasContent(currentPaper)){
+    const baseName = currentSavedPaperName || currentPaper.paper.title || "Current paper";
+    const filePaperName = currentSavedPaperName || uniquePaperName(baseName, savedPapers);
+    savedPapers[filePaperName] = currentPaper;
+    currentSavedPaperName = filePaperName;
+  }
+
+  return {
+    type: LIBRARY_FILE_TYPE,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    currentSavedPaperName,
+    currentPaper,
+    savedPapers
+  };
+}
+
+function normalizePaperLibraryPayload(parsed){
+  if(!parsed || typeof parsed !== "object"){
+    throw new Error("Invalid file.");
+  }
+
+  let savedPapersRaw = null;
+  let currentPaperRaw = null;
+  let currentSavedPaperName = null;
+
+  if(parsed.type === LIBRARY_FILE_TYPE || parsed.savedPapers){
+    savedPapersRaw = parsed.savedPapers ?? {};
+    currentPaperRaw = parsed.currentPaper ?? null;
+    currentSavedPaperName = parsed.currentSavedPaperName ?? null;
+  }else if(parsed.paper && Array.isArray(parsed.questions)){
+    const fallbackName = parsed.paper.title || "Imported paper";
+    savedPapersRaw = { [fallbackName]: parsed };
+    currentPaperRaw = parsed;
+    currentSavedPaperName = fallbackName;
+  }else{
+    savedPapersRaw = parsed;
+  }
+
+  if(!savedPapersRaw || typeof savedPapersRaw !== "object" || Array.isArray(savedPapersRaw)){
+    throw new Error("No saved papers were found in this file.");
+  }
+
+  const savedPapers = {};
+  for(const [name, snapshot] of Object.entries(savedPapersRaw)){
+    const cleanName = String(name || "").trim();
+    if(!cleanName) continue;
+    savedPapers[cleanName] = normalizePaperSnapshot(snapshot);
+  }
+
+  let currentPaper = null;
+  if(currentPaperRaw){
+    currentPaper = normalizePaperSnapshot(currentPaperRaw);
+  }else if(currentSavedPaperName && savedPapers[currentSavedPaperName]){
+    currentPaper = savedPapers[currentSavedPaperName];
+  }else{
+    const firstName = Object.keys(savedPapers).sort((a,b)=>a.localeCompare(b))[0];
+    if(firstName){
+      currentSavedPaperName = firstName;
+      currentPaper = savedPapers[firstName];
+    }
+  }
+
+  if(currentSavedPaperName && !savedPapers[currentSavedPaperName]){
+    const filePaperName = uniquePaperName(currentSavedPaperName, savedPapers);
+    if(currentPaper){
+      savedPapers[filePaperName] = currentPaper;
+      currentSavedPaperName = filePaperName;
+    }else{
+      currentSavedPaperName = null;
+    }
+  }
+
+  if(Object.keys(savedPapers).length === 0 && !currentPaper){
+    throw new Error("No saved papers were found in this file.");
+  }
+
+  return { savedPapers, currentPaper, currentSavedPaperName };
+}
+
+function exportPaperLibraryFile(){
+  const payload = makeLibraryFilePayload();
+  const count = Object.keys(payload.savedPapers).length;
+
+  if(count === 0 && !paperSnapshotHasContent(payload.currentPaper)){
+    alert("There are no saved papers or current-paper tags to save yet.");
+    return;
+  }
+
+  downloadJSONFile(payload, "ao-heatmap-paper-library.json");
+  updateLibraryStatus(`Saved ${count} paper${count === 1 ? "" : "s"} to a local library file.`);
+}
+
+function importPaperLibraryFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      const normalized = normalizePaperLibraryPayload(parsed);
+      const count = Object.keys(normalized.savedPapers).length;
+      const existingCount = Object.keys(getSavedPapers()).length;
+
+      const replaceText = existingCount
+        ? `This will replace your ${existingCount} saved paper${existingCount === 1 ? "" : "s"} in this browser. Continue?`
+        : "Load this paper library into the applet?";
+
+      if(!confirm(replaceText)) return;
+
+      setSavedPapers(normalized.savedPapers);
+
+      if(normalized.currentPaper){
+        loadSnapshotIntoState(normalized.currentPaper, normalized.currentSavedPaperName);
+      }else{
+        state.currentSavedPaperName = null;
+      }
+
+      saveState();
+      renderAll();
+      updateLibraryStatus(`Loaded ${count} paper${count === 1 ? "" : "s"} from local file.`);
+    }catch(err){
+      alert("Library import failed: " + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 /** helpers */
@@ -2562,15 +2745,19 @@ function exportExcel(){
   }
 }
 
-function exportJSON(){
-  const payload = JSON.stringify({ paper: state.paper, questions: state.questions }, null, 2);
-  const blob = new Blob([payload], {type:"application/json"});
+function downloadJSONFile(payload, fileName){
+  const serialized = JSON.stringify(payload, null, 2);
+  const blob = new Blob([serialized], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "ao-heatmap.json";
+  a.download = fileName;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function exportJSON(){
+  downloadJSONFile({ paper: state.paper, questions: state.questions }, "ao-heatmap.json");
 }
 
 function importJSON(file){
@@ -2629,6 +2816,13 @@ el("savePaperBtn").addEventListener("click", saveCurrentPaperToLibrary);
 el("loadPaperBtn").addEventListener("click", loadSelectedPaperFromLibrary);
 el("deletePaperBtn").addEventListener("click", deleteSelectedPaperFromLibrary);
 el("newPaperBtn").addEventListener("click", startNewBlankPaper);
+el("exportLibraryBtn").addEventListener("click", exportPaperLibraryFile);
+el("importLibraryBtn").addEventListener("click", ()=> el("importLibraryFile").click());
+el("importLibraryFile").addEventListener("change", (e)=>{
+  const f = e.target.files?.[0];
+  if(f) importPaperLibraryFile(f);
+  e.target.value = "";
+});
 
 el("paperTitle").addEventListener("input", ()=>{
   state.paper.title = el("paperTitle").value;
