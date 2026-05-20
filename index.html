@@ -622,6 +622,7 @@
           <div class="muted" id="paperMeta">—</div>
         </div>
         <div class="inline">
+          <button class="btn small" id="exportExcelBtn">Export Excel</button>
           <button class="btn small" id="printBtn">Print / Save as PDF</button>
         </div>
       </div>
@@ -949,6 +950,13 @@ function pct(n, d){
   if(!d) return "0%";
   return Math.round((n/d)*100) + "%";
 }
+function paperMetaText(){
+  const totalTagged = paperTotalTagged();
+  const totalPaper = Number(state.paper.totalMarks || 0);
+  return `${state.paper.title || "Untitled paper"} — tagged marks: ${totalTagged}` +
+    (totalPaper ? ` / paper total: ${totalPaper}` : "") +
+    (state.paper.note ? ` • Note: ${state.paper.note}` : "");
+}
 function boundaryClass(boundaryAfter){
   if(boundaryAfter === "thick") return "after-thick";
   if(boundaryAfter === "dashed") return "after-dashed";
@@ -1164,12 +1172,7 @@ function renderAll(){
   renderHeatTable();
   renderMatrixTable();
 
-  const totalTagged = paperTotalTagged();
-  const totalPaper = Number(state.paper.totalMarks || 0);
-  const metaText =
-    `${state.paper.title || "Untitled paper"} — tagged marks: ${totalTagged}` +
-    (totalPaper ? ` / paper total: ${totalPaper}` : "") +
-    (state.paper.note ? ` • Note: ${state.paper.note}` : "");
+  const metaText = paperMetaText();
 
   el("paperMeta").textContent = metaText;
 
@@ -1973,6 +1976,592 @@ function deleteSelectedQuestion(){
   renderAll();
 }
 
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const XLSX_STYLE = {
+  title: 1,
+  meta: 2,
+  header: 3,
+  left: 4,
+  center: 5,
+  questionHL: 6,
+  descHL: 7,
+  blank: 8,
+  note: 9,
+  matrixLabel: 10,
+  matrixTotal: 11,
+  marks: {
+    1: { none: 12, thick: 13, dashed: 14 },
+    2: { none: 15, thick: 16, dashed: 17 },
+    3: { none: 18, thick: 19, dashed: 20 }
+  }
+};
+
+function cleanXmlString(value){
+  return String(value ?? "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+}
+
+function xmlText(value){
+  return cleanXmlString(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function xmlAttr(value){
+  return xmlText(value).replace(/"/g, "&quot;");
+}
+
+function columnName(n){
+  let name = "";
+  while(n > 0){
+    const rem = (n - 1) % 26;
+    name = String.fromCharCode(65 + rem) + name;
+    n = Math.floor((n - 1) / 26);
+  }
+  return name;
+}
+
+function cellRef(row, col){
+  return `${columnName(col)}${row}`;
+}
+
+function sanitizeSheetName(name, fallback){
+  const cleaned = cleanXmlString(name || fallback)
+    .replace(/[:\\/?*\[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (cleaned || fallback).slice(0, 31);
+}
+
+function sanitizeFileName(name){
+  const cleaned = cleanXmlString(name || "")
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (cleaned || "ao-heatmap").slice(0, 90);
+}
+
+function markExcelStyle(mark){
+  const level = XLSX_STYLE.marks[Number(mark.level)] ? Number(mark.level) : 1;
+  const boundary = mark.boundaryAfter === "thick" || mark.boundaryAfter === "dashed"
+    ? mark.boundaryAfter
+    : "none";
+  return XLSX_STYLE.marks[level][boundary];
+}
+
+function excelCellXml(rowNum, cell){
+  const ref = cellRef(rowNum, cell.c);
+  const styleAttr = Number.isInteger(cell.s) ? ` s="${cell.s}"` : "";
+
+  if(cell.v === null || cell.v === undefined || cell.v === ""){
+    return `<c r="${ref}"${styleAttr}/>`;
+  }
+
+  if(typeof cell.v === "number" && Number.isFinite(cell.v)){
+    return `<c r="${ref}"${styleAttr}><v>${cell.v}</v></c>`;
+  }
+
+  if(typeof cell.v === "boolean"){
+    return `<c r="${ref}"${styleAttr} t="b"><v>${cell.v ? 1 : 0}</v></c>`;
+  }
+
+  return `<c r="${ref}"${styleAttr} t="inlineStr"><is><t>${xmlText(cell.v)}</t></is></c>`;
+}
+
+function worksheetXml({ rows, merges = [], cols = [], freezeRow = null }){
+  const rowList = rows
+    .filter(row => row.cells && row.cells.length)
+    .sort((a,b)=>a.r-b.r)
+    .map(row => ({
+      ...row,
+      cells: row.cells.slice().sort((a,b)=>a.c-b.c)
+    }));
+
+  const maxRow = Math.max(1, ...rowList.map(row => row.r));
+  const maxCellCol = Math.max(1, ...rowList.flatMap(row => row.cells.map(cell => cell.c)));
+  const maxCol = Math.max(maxCellCol, ...cols.map(col => col.max ?? col.min ?? 1));
+  const dimension = `A1:${columnName(maxCol)}${maxRow}`;
+
+  const sheetViews = freezeRow
+    ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${freezeRow}" topLeftCell="A${freezeRow + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+    : `<sheetViews><sheetView workbookViewId="0"/></sheetViews>`;
+
+  const colsXml = cols.length
+    ? `<cols>${cols.map(col => `<col min="${col.min}" max="${col.max ?? col.min}" width="${col.width}" customWidth="1"/>`).join("")}</cols>`
+    : "";
+
+  const sheetData = rowList.map(row => {
+    const height = row.height ? ` ht="${row.height}" customHeight="1"` : "";
+    return `<row r="${row.r}"${height}>${row.cells.map(cell => excelCellXml(row.r, cell)).join("")}</row>`;
+  }).join("");
+
+  const mergesXml = merges.length
+    ? `<mergeCells count="${merges.length}">${merges.map(ref => `<mergeCell ref="${ref}"/>`).join("")}</mergeCells>`
+    : "";
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<dimension ref="${dimension}"/>` +
+    sheetViews +
+    `<sheetFormatPr defaultRowHeight="18"/>` +
+    colsXml +
+    `<sheetData>${sheetData}</sheetData>` +
+    mergesXml +
+    `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>` +
+    `</worksheet>`;
+}
+
+function heatMapWorksheetXml(){
+  const mm = Math.max(1, maxMarks());
+  const lastCol = 2 + mm;
+  const rows = [];
+  const merges = [
+    `A1:${columnName(lastCol)}1`,
+    `A2:${columnName(lastCol)}2`
+  ];
+
+  rows.push({
+    r: 1,
+    height: 26,
+    cells: [{ c: 1, v: "Heat map", s: XLSX_STYLE.title }]
+  });
+  rows.push({
+    r: 2,
+    height: 34,
+    cells: [{ c: 1, v: paperMetaText(), s: XLSX_STYLE.meta }]
+  });
+
+  const headerCells = [
+    { c: 1, v: "Q#", s: XLSX_STYLE.header },
+    { c: 2, v: "Brief Description", s: XLSX_STYLE.header }
+  ];
+
+  for(let c=3; c<=lastCol; c++){
+    headerCells.push({
+      c,
+      v: c === 3 ? "AO Type and Level" : "",
+      s: XLSX_STYLE.header
+    });
+  }
+  rows.push({ r: 4, height: 24, cells: headerCells });
+  if(mm > 1) merges.push(`C4:${columnName(lastCol)}4`);
+
+  if(state.questions.length === 0){
+    rows.push({
+      r: 5,
+      height: 28,
+      cells: [{ c: 1, v: "Add questions on the left to generate a heatmap.", s: XLSX_STYLE.note }]
+    });
+    merges.push(`A5:${columnName(lastCol)}5`);
+  }else{
+    state.questions.forEach((q, idx)=>{
+      const rowNum = 5 + idx;
+      const cells = [
+        { c: 1, v: q.qNum, s: q.highlight ? XLSX_STYLE.questionHL : XLSX_STYLE.center },
+        { c: 2, v: q.desc || "", s: q.highlight ? XLSX_STYLE.descHL : XLSX_STYLE.left }
+      ];
+
+      const marks = q.marks ?? [];
+      for(let i=0; i<mm; i++){
+        if(i < marks.length){
+          const mark = marks[i];
+          cells.push({
+            c: 3 + i,
+            v: `${mark.ao}${mark.level}`,
+            s: markExcelStyle(mark)
+          });
+        }else{
+          cells.push({ c: 3 + i, v: "", s: XLSX_STYLE.blank });
+        }
+      }
+
+      rows.push({ r: rowNum, height: 22, cells });
+    });
+  }
+
+  return worksheetXml({
+    rows,
+    merges,
+    freezeRow: 4,
+    cols: [
+      { min: 1, max: 1, width: 8 },
+      { min: 2, max: 2, width: 38 },
+      { min: 3, max: lastCol, width: 6 }
+    ]
+  });
+}
+
+function matrixWorksheetXml(){
+  const counts = aoCounts();
+  const totalTagged = counts.total.total;
+  const rows = [];
+  const merges = ["A1:F1", "A2:F2"];
+
+  rows.push({
+    r: 1,
+    height: 26,
+    cells: [{ c: 1, v: "AO Matrix", s: XLSX_STYLE.title }]
+  });
+  rows.push({
+    r: 2,
+    height: 34,
+    cells: [{ c: 1, v: paperMetaText(), s: XLSX_STYLE.meta }]
+  });
+  rows.push({
+    r: 4,
+    height: 24,
+    cells: ["", "Level 1", "Level 2", "Level 3", "Total", "% within tagged"].map((value, idx)=>({
+      c: idx + 1,
+      v: value,
+      s: XLSX_STYLE.header
+    }))
+  });
+
+  const matrixRows = [
+    ["Select (S)", "S"],
+    ["Use (U)", "U"],
+    ["Interpret (I)", "I"]
+  ];
+
+  matrixRows.forEach(([label, key], idx)=>{
+    rows.push({
+      r: 5 + idx,
+      height: 22,
+      cells: [
+        { c: 1, v: label, s: XLSX_STYLE.matrixLabel },
+        { c: 2, v: counts[key][1], s: XLSX_STYLE.center },
+        { c: 3, v: counts[key][2], s: XLSX_STYLE.center },
+        { c: 4, v: counts[key][3], s: XLSX_STYLE.center },
+        { c: 5, v: counts[key].total, s: XLSX_STYLE.matrixTotal },
+        { c: 6, v: pct(counts[key].total, totalTagged), s: XLSX_STYLE.center }
+      ]
+    });
+  });
+
+  rows.push({
+    r: 8,
+    height: 22,
+    cells: [
+      { c: 1, v: "Total", s: XLSX_STYLE.matrixLabel },
+      { c: 2, v: counts.total[1], s: XLSX_STYLE.matrixTotal },
+      { c: 3, v: counts.total[2], s: XLSX_STYLE.matrixTotal },
+      { c: 4, v: counts.total[3], s: XLSX_STYLE.matrixTotal },
+      { c: 5, v: counts.total.total, s: XLSX_STYLE.matrixTotal },
+      { c: 6, v: "100%", s: XLSX_STYLE.matrixTotal }
+    ]
+  });
+
+  rows.push({
+    r: 9,
+    height: 22,
+    cells: [
+      { c: 1, v: "% by level", s: XLSX_STYLE.matrixLabel },
+      { c: 2, v: pct(counts.total[1], totalTagged), s: XLSX_STYLE.matrixTotal },
+      { c: 3, v: pct(counts.total[2], totalTagged), s: XLSX_STYLE.matrixTotal },
+      { c: 4, v: pct(counts.total[3], totalTagged), s: XLSX_STYLE.matrixTotal },
+      { c: 5, v: "", s: XLSX_STYLE.center },
+      { c: 6, v: "", s: XLSX_STYLE.center }
+    ]
+  });
+
+  const totalPaper = Number(state.paper.totalMarks || 0);
+  rows.push({
+    r: 11,
+    height: 34,
+    cells: [{
+      c: 1,
+      v: totalPaper
+        ? `${counts.total.total} marks tagged (${pct(counts.total.total, totalPaper)}) compared with paper total (${totalPaper}).`
+        : `Set "Total marks (paper)" to get the exam-percentage comparison.`,
+      s: XLSX_STYLE.note
+    }]
+  });
+  merges.push("A11:F11");
+
+  return worksheetXml({
+    rows,
+    merges,
+    freezeRow: 4,
+    cols: [
+      { min: 1, max: 1, width: 22 },
+      { min: 2, max: 6, width: 16 }
+    ]
+  });
+}
+
+function xlsxStylesXml(){
+  const border = (rightStyle = "thin") => {
+    const side = style => `<left style="thin"><color rgb="FF000000"/></left>` +
+      `<right style="${style}"><color rgb="FF000000"/></right>` +
+      `<top style="thin"><color rgb="FF000000"/></top>` +
+      `<bottom style="thin"><color rgb="FF000000"/></bottom>` +
+      `<diagonal/>`;
+    return `<border>${side(rightStyle)}</border>`;
+  };
+
+  const xf = (fontId, fillId, borderId, alignment = "") =>
+    `<xf numFmtId="0" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" xfId="0" applyFont="1" applyFill="1" applyBorder="1"${alignment ? ` applyAlignment="1">${alignment}</xf>` : "/>"}`;
+
+  const alignCenter = `<alignment horizontal="center" vertical="center" wrapText="1"/>`;
+  const alignLeft = `<alignment horizontal="left" vertical="center" wrapText="1"/>`;
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<fonts count="5">` +
+      `<font><sz val="11"/><color rgb="FF111827"/><name val="Calibri"/><family val="2"/></font>` +
+      `<font><b/><sz val="16"/><color rgb="FF111827"/><name val="Calibri"/><family val="2"/></font>` +
+      `<font><sz val="10"/><color rgb="FF5B6475"/><name val="Calibri"/><family val="2"/></font>` +
+      `<font><b/><sz val="11"/><color rgb="FF111827"/><name val="Calibri"/><family val="2"/></font>` +
+      `<font><b/><sz val="11"/><color rgb="FF111111"/><name val="Calibri"/><family val="2"/></font>` +
+    `</fonts>` +
+    `<fills count="8">` +
+      `<fill><patternFill patternType="none"/></fill>` +
+      `<fill><patternFill patternType="gray125"/></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFA8E6A3"/><bgColor indexed="64"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFF7E49C"/><bgColor indexed="64"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFF5A3A3"/><bgColor indexed="64"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFB9CBE8"/><bgColor indexed="64"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFF4F6FB"/><bgColor indexed="64"/></patternFill></fill>` +
+    `</fills>` +
+    `<borders count="4">` +
+      `<border><left/><right/><top/><bottom/><diagonal/></border>` +
+      border("thin") +
+      border("medium") +
+      border("dashed") +
+    `</borders>` +
+    `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+    `<cellXfs count="21">` +
+      `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
+      xf(1, 0, 0, alignCenter) +
+      xf(2, 0, 0, alignCenter) +
+      xf(3, 2, 1, alignCenter) +
+      xf(0, 0, 1, alignLeft) +
+      xf(0, 0, 1, alignCenter) +
+      xf(0, 6, 1, alignCenter) +
+      xf(0, 6, 1, alignLeft) +
+      xf(0, 7, 1, alignCenter) +
+      xf(2, 0, 0, alignLeft) +
+      xf(3, 0, 1, alignLeft) +
+      xf(3, 0, 1, alignCenter) +
+      xf(4, 3, 1, alignCenter) +
+      xf(4, 3, 2, alignCenter) +
+      xf(4, 3, 3, alignCenter) +
+      xf(4, 4, 1, alignCenter) +
+      xf(4, 4, 2, alignCenter) +
+      xf(4, 4, 3, alignCenter) +
+      xf(4, 5, 1, alignCenter) +
+      xf(4, 5, 2, alignCenter) +
+      xf(4, 5, 3, alignCenter) +
+    `</cellXfs>` +
+    `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
+    `<dxfs count="0"/>` +
+    `<tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>` +
+    `</styleSheet>`;
+}
+
+function encodeUtf8(text){
+  return new TextEncoder().encode(text);
+}
+
+let crcTable = null;
+function getCrcTable(){
+  if(crcTable) return crcTable;
+  crcTable = new Uint32Array(256);
+  for(let n=0; n<256; n++){
+    let c = n;
+    for(let k=0; k<8; k++){
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    crcTable[n] = c >>> 0;
+  }
+  return crcTable;
+}
+
+function crc32(bytes){
+  const table = getCrcTable();
+  let crc = 0xFFFFFFFF;
+  for(let i=0; i<bytes.length; i++){
+    crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function concatBytes(parts){
+  const total = parts.reduce((sum, part)=>sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for(const part of parts){
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+function dosDateTime(date){
+  const year = Math.max(1980, date.getFullYear());
+  return {
+    time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+  };
+}
+
+function makeZip(files){
+  const localParts = [];
+  const centralParts = [];
+  const stamp = dosDateTime(new Date());
+  let offset = 0;
+
+  files.forEach(file => {
+    const nameBytes = encodeUtf8(file.name);
+    const data = typeof file.data === "string" ? encodeUtf8(file.data) : file.data;
+    const crc = crc32(data);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, stamp.time, true);
+    localView.setUint16(12, stamp.date, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+    localParts.push(localHeader, data);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, stamp.time, true);
+    centralView.setUint16(14, stamp.date, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, data.length, true);
+    centralView.setUint32(24, data.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+    centralParts.push(centralHeader);
+
+    offset += localHeader.length + data.length;
+  });
+
+  const centralOffset = offset;
+  const centralSize = centralParts.reduce((sum, part)=>sum + part.length, 0);
+  const endHeader = new Uint8Array(22);
+  const endView = new DataView(endHeader.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, centralOffset, true);
+  endView.setUint16(20, 0, true);
+
+  return concatBytes([...localParts, ...centralParts, endHeader]);
+}
+
+function buildExcelWorkbookBlob(){
+  const heatSheetName = sanitizeSheetName("Heat Map", "Heat Map");
+  const matrixSheetName = sanitizeSheetName("AO Matrix", "AO Matrix");
+  const created = new Date().toISOString();
+
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<sheets>` +
+      `<sheet name="${xmlAttr(heatSheetName)}" sheetId="1" r:id="rId1"/>` +
+      `<sheet name="${xmlAttr(matrixSheetName)}" sheetId="2" r:id="rId2"/>` +
+    `</sheets>` +
+    `</workbook>`;
+
+  const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+      `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>` +
+      `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    `</Relationships>`;
+
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+      `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>` +
+      `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>` +
+    `</Relationships>`;
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+      `<Default Extension="xml" ContentType="application/xml"/>` +
+      `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+      `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+      `<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+      `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+      `<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>` +
+      `<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>` +
+    `</Types>`;
+
+  const coreXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+      `<dc:title>${xmlText(state.paper.title || "AO Heatmap")}</dc:title>` +
+      `<dc:creator>AO Heatmap Generator</dc:creator>` +
+      `<cp:lastModifiedBy>AO Heatmap Generator</cp:lastModifiedBy>` +
+      `<dcterms:created xsi:type="dcterms:W3CDTF">${created}</dcterms:created>` +
+      `<dcterms:modified xsi:type="dcterms:W3CDTF">${created}</dcterms:modified>` +
+    `</cp:coreProperties>`;
+
+  const appXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">` +
+      `<Application>AO Heatmap Generator</Application>` +
+      `<DocSecurity>0</DocSecurity>` +
+      `<ScaleCrop>false</ScaleCrop>` +
+      `<HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>2</vt:i4></vt:variant></vt:vector></HeadingPairs>` +
+      `<TitlesOfParts><vt:vector size="2" baseType="lpstr"><vt:lpstr>${xmlText(heatSheetName)}</vt:lpstr><vt:lpstr>${xmlText(matrixSheetName)}</vt:lpstr></vt:vector></TitlesOfParts>` +
+    `</Properties>`;
+
+  const archive = makeZip([
+    { name: "[Content_Types].xml", data: contentTypes },
+    { name: "_rels/.rels", data: rootRels },
+    { name: "docProps/core.xml", data: coreXml },
+    { name: "docProps/app.xml", data: appXml },
+    { name: "xl/workbook.xml", data: workbookXml },
+    { name: "xl/_rels/workbook.xml.rels", data: workbookRels },
+    { name: "xl/styles.xml", data: xlsxStylesXml() },
+    { name: "xl/worksheets/sheet1.xml", data: heatMapWorksheetXml() },
+    { name: "xl/worksheets/sheet2.xml", data: matrixWorksheetXml() }
+  ]);
+
+  return new Blob([archive], { type: XLSX_MIME });
+}
+
+function exportExcel(){
+  try{
+    const blob = buildExcelWorkbookBlob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const title = state.paper.title || state.currentSavedPaperName || "";
+    a.href = url;
+    a.download = title ? `${sanitizeFileName(title)}-ao-heatmap.xlsx` : "ao-heatmap.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(err){
+    console.error("Excel export failed:", err);
+    alert("Excel export failed: " + err.message);
+  }
+}
+
 function exportJSON(){
   const payload = JSON.stringify({ paper: state.paper, questions: state.questions }, null, 2);
   const blob = new Blob([payload], {type:"application/json"});
@@ -2111,6 +2700,7 @@ document.querySelectorAll("[data-ao][data-level]").forEach(btn=>{
 el("undoBtn").addEventListener("click", undo);
 el("deleteQuestionBtn").addEventListener("click", deleteSelectedQuestion);
 
+el("exportExcelBtn").addEventListener("click", exportExcel);
 el("exportBtn").addEventListener("click", exportJSON);
 el("importBtn").addEventListener("click", ()=> el("importFile").click());
 el("importFile").addEventListener("change", (e)=>{
