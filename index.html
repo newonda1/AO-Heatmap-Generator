@@ -409,7 +409,6 @@
 </head>
 <body>
   <h1>AO Heatmap Generator</h1>
-  <div class="muted">Build question structure first (parts/subparts) → editor follows the structure to tag marks. Colors = level (L1 green, L2 yellow, L3 red).</div>
 
   <div class="row" style="margin-top:14px;">
     <div class="card left">
@@ -450,9 +449,9 @@
           <button class="btn small" id="newPaperBtn">Start new blank paper</button>
         </div>
         <div class="inline" style="margin-top:10px;">
-          <button class="btn small" id="exportLibraryBtn">Save library to file</button>
-          <button class="btn small" id="importLibraryBtn">Load library from file</button>
-          <input id="importLibraryFile" type="file" accept="application/json,.json" style="display:none;" />
+          <button class="btn small" id="exportPaperFileBtn">Save current paper to file</button>
+          <button class="btn small" id="importPaperFileBtn">Load paper from file</button>
+          <input id="importPaperFile" type="file" accept="application/json,.json" style="display:none;" />
         </div>
         <div class="muted" id="libraryStatus" style="margin-top:8px;">Current paper is only in the working area until you save it.</div>
       </div>
@@ -548,9 +547,6 @@
       <div class="segList">
         <h2 style="margin:0;">Data controls</h2>
         <div class="inline">
-          <button class="btn small" id="exportBtn">Export JSON</button>
-          <button class="btn small" id="importBtn">Import JSON</button>
-          <input id="importFile" type="file" accept="application/json" style="display:none;" />
           <button class="btn small danger" id="resetBtn">Reset (clear everything)</button>
         </div>
         <div class="muted" id="backupStatus" style="margin-top:8px;">Automatic backup file: not created yet.</div>
@@ -657,7 +653,7 @@
 const LS_KEY = "ao_heatmap_v2";
 const BACKUP_KEY = "ao_heatmap_backup_download_v1";
 const PAPERS_KEY = "ao_heatmap_saved_papers_v1";
-const LIBRARY_FILE_TYPE = "ao-heatmap-paper-library";
+const PAPER_FILE_TYPE = "ao-heatmap-paper";
 
 let state = loadState() ?? {
   paper: { title:"", totalMarks:0, note:"" },
@@ -956,15 +952,6 @@ function startNewBlankPaper(){
   updateLibraryStatus("Started a new blank paper. Save it when you are ready.");
 }
 
-function paperSnapshotHasContent(snapshot){
-  return !!(
-    snapshot?.paper?.title ||
-    snapshot?.paper?.note ||
-    Number(snapshot?.paper?.totalMarks || 0) ||
-    (snapshot?.questions?.length ?? 0)
-  );
-}
-
 function uniquePaperName(baseName, papers){
   const base = (baseName || "Current paper").trim() || "Current paper";
   if(!papers[base]) return base;
@@ -978,132 +965,81 @@ function uniquePaperName(baseName, papers){
   return candidate;
 }
 
-function makeLibraryFilePayload(){
-  const savedPapers = JSON.parse(JSON.stringify(getSavedPapers()));
-  const currentPaper = makePaperSnapshot();
-  let currentSavedPaperName = state.currentSavedPaperName ?? null;
-
-  if(paperSnapshotHasContent(currentPaper)){
-    const baseName = currentSavedPaperName || currentPaper.paper.title || "Current paper";
-    const filePaperName = currentSavedPaperName || uniquePaperName(baseName, savedPapers);
-    savedPapers[filePaperName] = currentPaper;
-    currentSavedPaperName = filePaperName;
-  }
-
+function makePaperFilePayload(){
   return {
-    type: LIBRARY_FILE_TYPE,
+    type: PAPER_FILE_TYPE,
     version: 1,
     exportedAt: new Date().toISOString(),
-    currentSavedPaperName,
-    currentPaper,
-    savedPapers
+    ...makePaperSnapshot()
   };
 }
 
-function normalizePaperLibraryPayload(parsed){
+function normalizePaperFilePayload(parsed){
   if(!parsed || typeof parsed !== "object"){
     throw new Error("Invalid file.");
   }
 
-  let savedPapersRaw = null;
-  let currentPaperRaw = null;
-  let currentSavedPaperName = null;
-
-  if(parsed.type === LIBRARY_FILE_TYPE || parsed.savedPapers){
-    savedPapersRaw = parsed.savedPapers ?? {};
-    currentPaperRaw = parsed.currentPaper ?? null;
-    currentSavedPaperName = parsed.currentSavedPaperName ?? null;
-  }else if(parsed.paper && Array.isArray(parsed.questions)){
-    const fallbackName = parsed.paper.title || "Imported paper";
-    savedPapersRaw = { [fallbackName]: parsed };
-    currentPaperRaw = parsed;
-    currentSavedPaperName = fallbackName;
-  }else{
-    savedPapersRaw = parsed;
+  if(parsed.paper && Array.isArray(parsed.questions)){
+    return normalizePaperSnapshot(parsed);
   }
 
-  if(!savedPapersRaw || typeof savedPapersRaw !== "object" || Array.isArray(savedPapersRaw)){
-    throw new Error("No saved papers were found in this file.");
+  // Accept the previous all-library backup format by opening its active paper.
+  if(parsed.currentPaper){
+    return normalizePaperSnapshot(parsed.currentPaper);
   }
 
-  const savedPapers = {};
-  for(const [name, snapshot] of Object.entries(savedPapersRaw)){
-    const cleanName = String(name || "").trim();
-    if(!cleanName) continue;
-    savedPapers[cleanName] = normalizePaperSnapshot(snapshot);
-  }
-
-  let currentPaper = null;
-  if(currentPaperRaw){
-    currentPaper = normalizePaperSnapshot(currentPaperRaw);
-  }else if(currentSavedPaperName && savedPapers[currentSavedPaperName]){
-    currentPaper = savedPapers[currentSavedPaperName];
-  }else{
-    const firstName = Object.keys(savedPapers).sort((a,b)=>a.localeCompare(b))[0];
-    if(firstName){
-      currentSavedPaperName = firstName;
-      currentPaper = savedPapers[firstName];
+  if(parsed.savedPapers && typeof parsed.savedPapers === "object"){
+    const preferred = parsed.currentSavedPaperName && parsed.savedPapers[parsed.currentSavedPaperName]
+      ? parsed.currentSavedPaperName
+      : Object.keys(parsed.savedPapers).sort((a,b)=>a.localeCompare(b))[0];
+    if(preferred){
+      return normalizePaperSnapshot(parsed.savedPapers[preferred]);
     }
   }
 
-  if(currentSavedPaperName && !savedPapers[currentSavedPaperName]){
-    const filePaperName = uniquePaperName(currentSavedPaperName, savedPapers);
-    if(currentPaper){
-      savedPapers[filePaperName] = currentPaper;
-      currentSavedPaperName = filePaperName;
-    }else{
-      currentSavedPaperName = null;
-    }
-  }
-
-  if(Object.keys(savedPapers).length === 0 && !currentPaper){
-    throw new Error("No saved papers were found in this file.");
-  }
-
-  return { savedPapers, currentPaper, currentSavedPaperName };
+  throw new Error("No paper data was found in this file.");
 }
 
-function exportPaperLibraryFile(){
-  const payload = makeLibraryFilePayload();
-  const count = Object.keys(payload.savedPapers).length;
-
-  if(count === 0 && !paperSnapshotHasContent(payload.currentPaper)){
-    alert("There are no saved papers or current-paper tags to save yet.");
+function exportCurrentPaperFile(){
+  const title = (state.paper.title || "").trim();
+  if(!title){
+    alert("Enter a Paper title before saving this paper to a file.");
     return;
   }
 
-  downloadJSONFile(payload, "ao-heatmap-paper-library.json");
-  updateLibraryStatus(`Saved ${count} paper${count === 1 ? "" : "s"} to a local library file.`);
+  if(state.questions.length === 0){
+    alert("Add at least one question before saving this paper to a file.");
+    return;
+  }
+
+  downloadJSONFile(makePaperFilePayload(), `${sanitizeFileName(title)}.json`);
+  updateLibraryStatus(`Saved “${title}” to a local paper file.`);
 }
 
-function importPaperLibraryFile(file){
+function importPaperFile(file){
   const reader = new FileReader();
   reader.onload = (e)=>{
     try{
       const parsed = JSON.parse(e.target.result);
-      const normalized = normalizePaperLibraryPayload(parsed);
-      const count = Object.keys(normalized.savedPapers).length;
-      const existingCount = Object.keys(getSavedPapers()).length;
-
-      const replaceText = existingCount
-        ? `This will replace your ${existingCount} saved paper${existingCount === 1 ? "" : "s"} in this browser. Continue?`
-        : "Load this paper library into the applet?";
+      const snapshot = normalizePaperFilePayload(parsed);
+      const title = (snapshot.paper.title || "").trim() || "Imported paper";
+      const replaceText = state.questions.length
+        ? `Load “${title}” from file? This will replace the current working paper.`
+        : `Load “${title}” from file?`;
 
       if(!confirm(replaceText)) return;
 
-      setSavedPapers(normalized.savedPapers);
+      const papers = getSavedPapers();
+      const savedName = uniquePaperName(title, papers);
+      papers[savedName] = snapshot;
+      setSavedPapers(papers);
 
-      if(normalized.currentPaper){
-        loadSnapshotIntoState(normalized.currentPaper, normalized.currentSavedPaperName);
-      }else{
-        state.currentSavedPaperName = null;
-      }
-
+      loadSnapshotIntoState(snapshot, savedName);
       saveState();
       renderAll();
-      updateLibraryStatus(`Loaded ${count} paper${count === 1 ? "" : "s"} from local file.`);
+      updateLibraryStatus(`Loaded “${savedName}” from local file.`);
     }catch(err){
-      alert("Library import failed: " + err.message);
+      alert("Paper import failed: " + err.message);
     }
   };
   reader.readAsText(file);
@@ -2160,6 +2096,11 @@ function deleteSelectedQuestion(){
 }
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const XLSX_MARK_AOS = ["S", "U", "I"];
+const XLSX_MARK_LEVELS = [1, 2, 3];
+const XLSX_MARK_BOUNDARIES = ["none", "thick", "dashed"];
+const XLSX_MARK_STYLE_START = 12;
+const XLSX_NUM_FMT = { S: 164, U: 165, I: 166, average: 167 };
 const XLSX_STYLE = {
   title: 1,
   meta: 2,
@@ -2172,12 +2113,25 @@ const XLSX_STYLE = {
   note: 9,
   matrixLabel: 10,
   matrixTotal: 11,
-  marks: {
-    1: { none: 12, thick: 13, dashed: 14 },
-    2: { none: 15, thick: 16, dashed: 17 },
-    3: { none: 18, thick: 19, dashed: 20 }
-  }
+  marks: buildMarkStyleMap(),
+  average: XLSX_MARK_STYLE_START + (XLSX_MARK_AOS.length * XLSX_MARK_LEVELS.length * XLSX_MARK_BOUNDARIES.length)
 };
+
+function buildMarkStyleMap(){
+  const map = {};
+  let styleId = XLSX_MARK_STYLE_START;
+  XLSX_MARK_AOS.forEach(ao=>{
+    map[ao] = {};
+    XLSX_MARK_LEVELS.forEach(level=>{
+      map[ao][level] = {};
+      XLSX_MARK_BOUNDARIES.forEach(boundary=>{
+        map[ao][level][boundary] = styleId;
+        styleId += 1;
+      });
+    });
+  });
+  return map;
+}
 
 function cleanXmlString(value){
   return String(value ?? "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
@@ -2225,16 +2179,32 @@ function sanitizeFileName(name){
 }
 
 function markExcelStyle(mark){
-  const level = XLSX_STYLE.marks[Number(mark.level)] ? Number(mark.level) : 1;
+  const ao = XLSX_STYLE.marks[mark.ao] ? mark.ao : "S";
+  const level = XLSX_STYLE.marks[ao][Number(mark.level)] ? Number(mark.level) : 1;
   const boundary = mark.boundaryAfter === "thick" || mark.boundaryAfter === "dashed"
     ? mark.boundaryAfter
     : "none";
-  return XLSX_STYLE.marks[level][boundary];
+  return XLSX_STYLE.marks[ao][level][boundary];
+}
+
+function averageMarkLevel(q){
+  const marks = q.marks ?? [];
+  if(marks.length === 0) return null;
+
+  const sum = marks.reduce((acc, mark)=>acc + Number(mark.level || 0), 0);
+  return Math.round((sum / marks.length) * 100) / 100;
 }
 
 function excelCellXml(rowNum, cell){
   const ref = cellRef(rowNum, cell.c);
   const styleAttr = Number.isInteger(cell.s) ? ` s="${cell.s}"` : "";
+
+  if(cell.f){
+    const valueXml = (typeof cell.v === "number" && Number.isFinite(cell.v))
+      ? `<v>${cell.v}</v>`
+      : "";
+    return `<c r="${ref}"${styleAttr}><f>${xmlText(cell.f)}</f>${valueXml}</c>`;
+  }
 
   if(cell.v === null || cell.v === undefined || cell.v === ""){
     return `<c r="${ref}"${styleAttr}/>`;
@@ -2296,7 +2266,10 @@ function worksheetXml({ rows, merges = [], cols = [], freezeRow = null }){
 
 function heatMapWorksheetXml(){
   const mm = Math.max(1, maxMarks());
-  const lastCol = 2 + mm;
+  const markStartCol = 3;
+  const markEndCol = 2 + mm;
+  const averageCol = markEndCol + 2;
+  const lastCol = averageCol;
   const rows = [];
   const merges = [
     `A1:${columnName(lastCol)}1`,
@@ -2319,15 +2292,16 @@ function heatMapWorksheetXml(){
     { c: 2, v: "Brief Description", s: XLSX_STYLE.header }
   ];
 
-  for(let c=3; c<=lastCol; c++){
+  for(let c=markStartCol; c<=markEndCol; c++){
     headerCells.push({
       c,
-      v: c === 3 ? "AO Type and Level" : "",
+      v: c === markStartCol ? "AO Type and Level" : "",
       s: XLSX_STYLE.header
     });
   }
+  headerCells.push({ c: averageCol, v: "Avg level", s: XLSX_STYLE.header });
   rows.push({ r: 4, height: 24, cells: headerCells });
-  if(mm > 1) merges.push(`C4:${columnName(lastCol)}4`);
+  if(mm > 1) merges.push(`${columnName(markStartCol)}4:${columnName(markEndCol)}4`);
 
   if(state.questions.length === 0){
     rows.push({
@@ -2349,13 +2323,27 @@ function heatMapWorksheetXml(){
         if(i < marks.length){
           const mark = marks[i];
           cells.push({
-            c: 3 + i,
-            v: `${mark.ao}${mark.level}`,
+            c: markStartCol + i,
+            v: Number(mark.level || 0),
             s: markExcelStyle(mark)
           });
         }else{
-          cells.push({ c: 3 + i, v: "", s: XLSX_STYLE.blank });
+          cells.push({ c: markStartCol + i, v: "", s: XLSX_STYLE.blank });
         }
+      }
+
+      const avg = averageMarkLevel(q);
+      if(avg !== null){
+        const avgStart = cellRef(rowNum, markStartCol);
+        const avgEnd = cellRef(rowNum, markStartCol + marks.length - 1);
+        cells.push({
+          c: averageCol,
+          v: avg,
+          f: `ROUND(AVERAGE(${avgStart}:${avgEnd}),2)`,
+          s: XLSX_STYLE.average
+        });
+      }else{
+        cells.push({ c: averageCol, v: "", s: XLSX_STYLE.center });
       }
 
       rows.push({ r: rowNum, height: 22, cells });
@@ -2369,7 +2357,9 @@ function heatMapWorksheetXml(){
     cols: [
       { min: 1, max: 1, width: 8 },
       { min: 2, max: 2, width: 38 },
-      { min: 3, max: lastCol, width: 6 }
+      { min: markStartCol, max: markEndCol, width: 6 },
+      { min: averageCol - 1, max: averageCol - 1, width: 3 },
+      { min: averageCol, max: averageCol, width: 11 }
     ]
   });
 }
@@ -2482,14 +2472,37 @@ function xlsxStylesXml(){
     return `<border>${side(rightStyle)}</border>`;
   };
 
-  const xf = (fontId, fillId, borderId, alignment = "") =>
-    `<xf numFmtId="0" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" xfId="0" applyFont="1" applyFill="1" applyBorder="1"${alignment ? ` applyAlignment="1">${alignment}</xf>` : "/>"}`;
+  const xf = (fontId, fillId, borderId, alignment = "", numFmtId = 0) => {
+    const attrs =
+      `numFmtId="${numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" xfId="0"` +
+      ` applyFont="1" applyFill="1" applyBorder="1"` +
+      (numFmtId ? ` applyNumberFormat="1"` : "");
+    return alignment
+      ? `<xf ${attrs} applyAlignment="1">${alignment}</xf>`
+      : `<xf ${attrs}/>`;
+  };
 
   const alignCenter = `<alignment horizontal="center" vertical="center" wrapText="1"/>`;
   const alignLeft = `<alignment horizontal="left" vertical="center" wrapText="1"/>`;
+  const fillByLevel = { 1: 3, 2: 4, 3: 5 };
+  const borderByBoundary = { none: 1, thick: 2, dashed: 3 };
+  const markXfs = XLSX_MARK_AOS.flatMap(ao =>
+    XLSX_MARK_LEVELS.flatMap(level =>
+      XLSX_MARK_BOUNDARIES.map(boundary =>
+        xf(4, fillByLevel[level], borderByBoundary[boundary], alignCenter, XLSX_NUM_FMT[ao])
+      )
+    )
+  ).join("");
+  const cellXfsCount = XLSX_STYLE.average + 1;
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<numFmts count="4">` +
+      `<numFmt numFmtId="${XLSX_NUM_FMT.S}" formatCode="&quot;S&quot;0"/>` +
+      `<numFmt numFmtId="${XLSX_NUM_FMT.U}" formatCode="&quot;U&quot;0"/>` +
+      `<numFmt numFmtId="${XLSX_NUM_FMT.I}" formatCode="&quot;I&quot;0"/>` +
+      `<numFmt numFmtId="${XLSX_NUM_FMT.average}" formatCode="0.00"/>` +
+    `</numFmts>` +
     `<fonts count="5">` +
       `<font><sz val="11"/><color rgb="FF111827"/><name val="Calibri"/><family val="2"/></font>` +
       `<font><b/><sz val="16"/><color rgb="FF111827"/><name val="Calibri"/><family val="2"/></font>` +
@@ -2514,7 +2527,7 @@ function xlsxStylesXml(){
       border("dashed") +
     `</borders>` +
     `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-    `<cellXfs count="21">` +
+    `<cellXfs count="${cellXfsCount}">` +
       `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
       xf(1, 0, 0, alignCenter) +
       xf(2, 0, 0, alignCenter) +
@@ -2527,15 +2540,8 @@ function xlsxStylesXml(){
       xf(2, 0, 0, alignLeft) +
       xf(3, 0, 1, alignLeft) +
       xf(3, 0, 1, alignCenter) +
-      xf(4, 3, 1, alignCenter) +
-      xf(4, 3, 2, alignCenter) +
-      xf(4, 3, 3, alignCenter) +
-      xf(4, 4, 1, alignCenter) +
-      xf(4, 4, 2, alignCenter) +
-      xf(4, 4, 3, alignCenter) +
-      xf(4, 5, 1, alignCenter) +
-      xf(4, 5, 2, alignCenter) +
-      xf(4, 5, 3, alignCenter) +
+      markXfs +
+      xf(3, 0, 1, alignCenter, XLSX_NUM_FMT.average) +
     `</cellXfs>` +
     `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
     `<dxfs count="0"/>` +
@@ -2668,6 +2674,7 @@ function buildExcelWorkbookBlob(){
       `<sheet name="${xmlAttr(heatSheetName)}" sheetId="1" r:id="rId1"/>` +
       `<sheet name="${xmlAttr(matrixSheetName)}" sheetId="2" r:id="rId2"/>` +
     `</sheets>` +
+    `<calcPr calcMode="auto"/>` +
     `</workbook>`;
 
   const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -2757,7 +2764,7 @@ function downloadJSONFile(payload, fileName){
 }
 
 function exportJSON(){
-  downloadJSONFile({ paper: state.paper, questions: state.questions }, "ao-heatmap.json");
+  exportCurrentPaperFile();
 }
 
 function importJSON(file){
@@ -2816,11 +2823,11 @@ el("savePaperBtn").addEventListener("click", saveCurrentPaperToLibrary);
 el("loadPaperBtn").addEventListener("click", loadSelectedPaperFromLibrary);
 el("deletePaperBtn").addEventListener("click", deleteSelectedPaperFromLibrary);
 el("newPaperBtn").addEventListener("click", startNewBlankPaper);
-el("exportLibraryBtn").addEventListener("click", exportPaperLibraryFile);
-el("importLibraryBtn").addEventListener("click", ()=> el("importLibraryFile").click());
-el("importLibraryFile").addEventListener("change", (e)=>{
+el("exportPaperFileBtn").addEventListener("click", exportCurrentPaperFile);
+el("importPaperFileBtn").addEventListener("click", ()=> el("importPaperFile").click());
+el("importPaperFile").addEventListener("change", (e)=>{
   const f = e.target.files?.[0];
-  if(f) importPaperLibraryFile(f);
+  if(f) importPaperFile(f);
   e.target.value = "";
 });
 
@@ -2895,13 +2902,6 @@ el("undoBtn").addEventListener("click", undo);
 el("deleteQuestionBtn").addEventListener("click", deleteSelectedQuestion);
 
 el("exportExcelBtn").addEventListener("click", exportExcel);
-el("exportBtn").addEventListener("click", exportJSON);
-el("importBtn").addEventListener("click", ()=> el("importFile").click());
-el("importFile").addEventListener("change", (e)=>{
-  const f = e.target.files?.[0];
-  if(f) importJSON(f);
-  e.target.value = "";
-});
 el("resetBtn").addEventListener("click", resetAll);
 
 el("printBtn").addEventListener("click", ()=> window.print());
