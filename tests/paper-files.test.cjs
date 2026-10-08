@@ -6,18 +6,22 @@ const elements = new Map();
 const handlers = new Map();
 const alerts = [];
 const downloads = [];
+const makeElement = () => ({
+  value: '', checked: false, open: false, style: {}, children: [], dataset: {},
+  set innerHTML(value) { this.children = []; },
+  addEventListener() {}, focus() {}, scrollIntoView() {},
+  appendChild(child) { this.children.push(child); },
+  setAttribute(key, value) { this[key] = value; },
+  showModal() { this.open = true; }, close() { this.open = false; }
+});
 const element = id => {
-  if (!elements.has(id)) elements.set(id, {
-    value: '', checked: false, open: false, style: {},
-    addEventListener() {}, focus() {},
-    showModal() { this.open = true; }, close() { this.open = false; }
-  });
+  if (!elements.has(id)) elements.set(id, makeElement());
   return elements.get(id);
 };
 const context = vm.createContext({
   console, Blob, TextEncoder, setTimeout,
   alert: message => alerts.push(message),
-  document: { getElementById: element, querySelectorAll: () => [], activeElement: null },
+  document: { createElement: makeElement, getElementById: element, querySelectorAll: () => [], activeElement: null },
   window: { addEventListener: (name, handler) => handlers.set(name, handler) },
   FileReader: class {
     readAsText(file) {
@@ -31,7 +35,7 @@ const script = fs.readFileSync(new URL('../index.html', `file://${__filename}`),
   .match(/<script>([\s\S]*)<\/script>/)[1];
 vm.runInContext(script.slice(0, script.indexOf('// init')), context);
 vm.runInContext(`
-  renderAll = ()=>{};
+  renderAll = ()=>{ renderQuestionBuilderMode(); renderDraftPartButtons(); };
   downloadJSONFile = (payload, name)=>downloads.push({payload, name});
   clearQuestionDraft();
 `, context);
@@ -134,3 +138,56 @@ assert.equal(element('qNum').value, '');
 assert.equal(run('state.draft.parts.length'), 0, 'Adding a question clears its draft');
 assert.equal(dirty(), true, 'Added questions still require saving');
 console.log('Question builder checks passed: invalid structure rejected, valid parts retained, and draft cleared.');
+
+run('clearQuestionDraft(); rebuildSubpartsUI = ()=>{};');
+element('qNum').value = '2';
+element('qMarks').value = '6';
+run('addOrSaveDraftPart()');
+assert.equal(element('qNoPartsOption').style.display, 'none');
+assert.equal(element('draftPartButtons').children[0].children[0].textContent, '(a) · 1 mark');
+element('partMarks').value = '2';
+run('addOrSaveDraftPart(); editDraftPart(0)');
+assert.equal(element('partLabel').value, 'a');
+element('partMarks').value = '4';
+run('addQuestion()');
+assert.equal(current().questions.length, 1, 'Pending part edit cannot be silently omitted');
+run('addOrSaveDraftPart()');
+assert.equal(run('state.draft.parts.length'), 2, 'Saving replaces the part without duplicating it');
+assert.equal(run('state.draft.parts[0].marks'), 4);
+run('editDraftPart(0)');
+element('partLabel').value = 'b';
+run('addOrSaveDraftPart()');
+assert.equal(run('state.draft.parts[0].label'), 'a', 'Duplicate label edit is rejected');
+run('resetPartForm(); addQuestion()');
+assert.equal(current().questions.length, 2);
+run('state.selectedQIndex = 1; tagMark("S", 1); tagMark("U", 2); editQuestion(state.questions[1]);');
+assert.equal(element('addQuestionBtn').textContent, 'Save question changes');
+assert.equal(run('state.draft.parts.length'), 2);
+run('editDraftPart(1)');
+element('partMarks').value = '3';
+run('addOrSaveDraftPart()');
+assert.equal(current().questions[1].structure.parts[1].marks, 2, 'Stored question stays unchanged until Save question changes');
+element('qMarks').value = '7';
+run('addQuestion()');
+assert.equal(current().questions.length, 2, 'Existing question is replaced in place');
+assert.equal(current().questions[1].structure.parts[1].marks, 3);
+assert.equal(current().questions[1].marks.length, 2, 'Tags on earlier unchanged parts survive');
+run('editQuestion(state.questions[1]); editDraftPart(0)');
+element('partMarks').value = '3';
+run('addOrSaveDraftPart()');
+element('qMarks').value = '6';
+run('addQuestion()');
+assert.equal(current().questions[1].marks.length, 0, 'Tags cannot shift into changed parts');
+run('editQuestion(state.questions[1]); clearDraftParts(); clearQuestionDraft()');
+assert.equal(current().questions[1].structure.parts.length, 2, 'Cancelling question edit leaves stored structure intact');
+assert.equal(element('qNoPartsOption').style.display, 'flex');
+assert.equal(element('addQuestionBtn').textContent, 'Add question');
+assert.equal(element('draftPartButtons').children.length, 0);
+// Preserve every tag when only metadata changes, and the ordered prefix when
+// a later segment changes or is removed.
+context.oldQuestion = { segmentPlan: [{label:'a', marksCount:2}, {label:'b', marksCount:1}], marks:[{ao:'S',level:1},{ao:'U',level:2},{ao:'I',level:3}] };
+context.newQuestion = { segmentPlan: [{label:'a', marksCount:2}, {label:'b', marksCount:1}] };
+assert.equal(run('retainedTagsForEdit(oldQuestion, newQuestion).length'), 3);
+context.newQuestion.segmentPlan[1].marksCount = 2;
+assert.equal(run('retainedTagsForEdit(oldQuestion, newQuestion).length'), 2);
+console.log('Part editing checks passed: chips, hidden no-parts option, duplicate guard, cancel, existing questions, and safe AO tag retention.');
