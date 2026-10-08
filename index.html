@@ -491,7 +491,7 @@
         <div id="partsBuilder" style="margin-top:10px;">
           <div id="draftPartButtons" class="draft-parts" role="group" aria-label="Added question parts"></div>
 
-          <div style="margin-top:10px;">
+          <div id="partEntryFields" style="margin-top:10px;">
             <div class="grid2" id="partFields">
               <div>
                 <label>Question part</label>
@@ -521,15 +521,14 @@
               </div>
             </div>
 
+          </div>
             <div class="inline" style="margin-top:12px; justify-content:space-between;">
-              <div class="inline" style="gap:8px;">
+              <div id="partSaveActions" class="inline" style="gap:8px;">
                 <button class="btn small" id="addOrSavePartBtn">Add this part to draft</button>
                 <button class="btn small" id="cancelEditPartBtn" style="display:none;">Cancel part edit</button>
               </div>
               <button class="btn small danger" id="clearPartsBtn">Clear parts</button>
             </div>
-
-          </div>
         </div>
 
         <p id="questionEditNotice" class="muted" style="display:none; margin-bottom:0;">Changing the structure clears AO tags from the first changed part or subpart onward. Earlier unchanged parts keep their tags.</p>
@@ -915,7 +914,7 @@ function requireSelectedQuestion(){
   return state.questions[idx];
 }
 function romanLabelOptions(){ return ["i","ii","iii","iv","v"]; }
-function partLabelOptions(){ return ["a","b","c","d","e","f","g","h"]; }
+function partLabelOptions(){ return ["a","b","c","d","e","f","g","h","i","j","k","l","m"]; }
 
 function buildSegmentPlan(q){
   const plan = [];
@@ -1559,6 +1558,20 @@ function renderDraftPartButtons(){
   if(state.draft.parts.length) el("qNoParts").checked = false;
   el("addOrSavePartBtn").textContent = state.draft.editingPartIndex === null ? "Add this part to draft" : "Save part changes";
   el("cancelEditPartBtn").style.display = state.draft.editingPartIndex === null ? "none" : "";
+  renderPartEntryAvailability();
+}
+
+function canAddDraftPart(){
+  const questionMarks = Number(el("qMarks").value);
+  const addedMarks = totalMarksFromStructure({ noParts:false, parts:state.draft.parts });
+  const unusedLabel = partLabelOptions().some(label=>!state.draft.parts.some(part=>part.label === label));
+  return unusedLabel && !(questionMarks > 0 && addedMarks >= questionMarks);
+}
+
+function renderPartEntryAvailability(){
+  const show = state.draft.editingPartIndex !== null || canAddDraftPart();
+  el("partEntryFields").style.display = show ? "block" : "none";
+  el("partSaveActions").style.display = show ? "flex" : "none";
 }
 
 function renderPartFields(){
@@ -1606,6 +1619,10 @@ function editDraftPart(index){
 }
 
 function addOrSaveDraftPart(){
+  if(state.draft.editingPartIndex === null && !canAddDraftPart()){
+    alert("The question already has all its marks or part labels allocated. Select an existing part to edit it.");
+    return;
+  }
   const label = el("partLabel").value;
   const marks = Number(el("partMarks").value);
   const hasSubparts = el("partHasSubparts").checked;
@@ -1692,7 +1709,7 @@ function addQuestion(){
     structure.parts = [];
   }else{
     if(state.draft.parts.length === 0){
-      alert("Add at least one part (a–h), or tick 'This question does not have parts'.");
+      alert("Add at least one part (a–m), or tick 'This question does not have parts'.");
       return;
     }
     structure.parts = state.draft.parts.map(p => ({
@@ -2520,6 +2537,7 @@ window.addEventListener("beforeunload", (e)=>{
 });
 
 el("qNoParts").addEventListener("change", ()=>renderAll());
+el("qMarks").addEventListener("input", renderPartEntryAvailability);
 
 /* CHANGE #1: when subparts is checked, auto-create the (i) row immediately */
 el("partHasSubparts").addEventListener("change", ()=>{
