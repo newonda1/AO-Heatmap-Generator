@@ -59,7 +59,18 @@
       border-left:4px solid #88ddd0;
       padding:18px;
     }
-    .setup-card > h2, .question-card > h2{
+    .paper-questions-card{
+      background:#27283e;
+      border-color:#756a92;
+      border-left:4px solid #cfb9f3;
+      padding:18px;
+    }
+    .paper-questions-card #questionList{
+      margin-top:0;
+      padding-top:0;
+      border-top:none;
+    }
+    .setup-card > h2, .question-card > h2, .paper-questions-card > h2{
       color:var(--text);
       font-size:18px;
       font-weight:750;
@@ -312,35 +323,6 @@
       line-height:1.35;
     }
 
-    .draftListRow{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      padding:10px;
-      border:1px solid rgba(42,58,99,0.7);
-      border-radius:12px;
-      background: rgba(11,20,48,0.45);
-    }
-    .draftListRow .meta{
-      display:flex;
-      flex-direction:column;
-      gap:2px;
-    }
-    .draftListRow .meta .top{
-      font-weight:900;
-      font-size:12px;
-    }
-    .draftListRow .meta .bot{
-      font-size:12px;
-      color:var(--muted);
-    }
-    .draftListRow .actions{
-      display:flex;
-      gap:8px;
-      align-items:center;
-    }
-
     /* -------------------------
    PRINT STYLES
 ------------------------- */
@@ -503,7 +485,7 @@
 
         <div id="partsBuilder" style="margin-top:10px;">
           <div class="hintBox">
-            Build the question structure here. You can edit it freely until you click “Add question”.
+            Build the question structure here before you click “Add question”.
           </div>
 
           <div style="margin-top:10px;">
@@ -539,29 +521,19 @@
             <div class="inline" style="margin-top:12px; justify-content:space-between;">
               <div class="inline" style="gap:8px;">
                 <button class="btn small" id="addOrSavePartBtn">Add this part to draft</button>
-                <button class="btn small" id="cancelEditPartBtn" style="display:none;">Cancel edit</button>
               </div>
               <button class="btn small danger" id="clearPartsBtn">Clear parts</button>
             </div>
 
-            <div id="partsStatus" style="margin-top:10px;"></div>
-
-            <div class="segList" style="margin-top:12px;">
-              <div class="muted">Draft parts/subparts (editable):</div>
-              <div id="partsPreview" class="hintBox">None yet.</div>
-
-              <div id="draftPartsList" style="display:flex; flex-direction:column; gap:8px; margin-top:10px;"></div>
-            </div>
           </div>
         </div>
 
-        <div class="muted" style="margin-top:10px;">
-          Tip: click a question below to edit its AO tags.
-        </div>
-
-        <div id="questionList" class="segList"></div>
       </section>
 
+      <section class="card paper-questions-card" aria-labelledby="paperQuestionsHeading">
+        <h2 id="paperQuestionsHeading">Paper Questions</h2>
+        <div id="questionList" class="segList"></div>
+      </section>
     </div>
 
     <div class="card right">
@@ -680,7 +652,7 @@ let state = {
   selectedMarkIndex: null,
   dragQuestionIndex: null,
   kbdAO: null,
-  draft: { parts: [], editingPartIndex: null }
+  draft: { parts: [] }
 };
 
 const el = (id) => document.getElementById(id);
@@ -785,7 +757,6 @@ function loadSnapshotIntoState(snapshot){
   state.dragQuestionIndex = null;
   state.kbdAO = null;
   state.draft.parts = [];
-  state.draft.editingPartIndex = null;
   clearQuestionDraft();
 }
 
@@ -1125,7 +1096,6 @@ function renderAll(){
   el("partsBuilder").style.display = el("qNoParts").checked ? "none" : "block";
   el("subpartsBuilder").style.display = el("partHasSubparts").checked ? "block" : "none";
 
-  renderDraftPartsPreviewAndList();
   renderQuestionList();
   renderEditor();
   renderHeatTable();
@@ -1546,120 +1516,9 @@ function renderMatrixTable(){
   t.appendChild(trNote);
 }
 
-/** Draft part editing UI */
-function renderDraftPartsPreviewAndList(){
-  const box = el("partsPreview");
-  const list = el("draftPartsList");
-  list.innerHTML = "";
-
-  const qMarks = Number(el("qMarks").value || 0);
-
-  if(state.draft.parts.length === 0){
-    box.textContent = "None yet.";
-  }else{
-    const lines = [];
-    for(const p of state.draft.parts){
-      if(!p.hasSubparts){
-        lines.push(`(${p.label}) — ${p.marks}`);
-      }else{
-        const subs = p.subparts.map(sp=>`(${sp.label}) ${sp.marks}`).join(", ");
-        const sum = p.subparts.reduce((a,s)=>a+s.marks,0);
-        lines.push(`(${p.label}) — subparts: ${subs}  [sum ${sum}]`);
-      }
-    }
-    box.textContent = lines.join(" • ");
-  }
-
-  state.draft.parts.forEach((p, idx)=>{
-    const row = document.createElement("div");
-    row.className = "draftListRow";
-
-    const meta = document.createElement("div");
-    meta.className = "meta";
-
-    const top = document.createElement("div");
-    top.className = "top";
-    top.textContent = `(${p.label})`;
-
-    const bot = document.createElement("div");
-    bot.className = "bot";
-    if(!p.hasSubparts){
-      bot.textContent = `${p.marks} marks`;
-    }else{
-      const sum = (p.subparts ?? []).reduce((a,s)=>a+Number(s.marks||0), 0);
-      bot.textContent = `subparts (${(p.subparts ?? []).length}) • ${sum} marks`;
-    }
-
-    meta.appendChild(top);
-    meta.appendChild(bot);
-
-    const actions = document.createElement("div");
-    actions.className = "actions";
-
-    const edit = document.createElement("button");
-    edit.className = "btn small";
-    edit.textContent = "Edit";
-    edit.addEventListener("click", ()=> loadDraftPartForEditing(idx));
-
-    const remove = document.createElement("button");
-    remove.className = "btn small danger";
-    remove.textContent = "Remove";
-    remove.addEventListener("click", ()=>{
-      state.draft.parts.splice(idx, 1);
-      if(state.draft.editingPartIndex === idx){
-        cancelEditDraftPart();
-      }else if(state.draft.editingPartIndex !== null && state.draft.editingPartIndex > idx){
-        state.draft.editingPartIndex -= 1;
-      }
-      renderDraftPartsPreviewAndList();
-      renderPartsStatus();
-    });
-
-    actions.appendChild(edit);
-    actions.appendChild(remove);
-
-    row.appendChild(meta);
-    row.appendChild(actions);
-    list.appendChild(row);
-  });
-
-  renderPartsStatus();
-}
-
-function renderPartsStatus(){
-  const status = el("partsStatus");
-  status.innerHTML = "";
-
-  const noParts = el("qNoParts").checked;
-  if(noParts){
-    status.innerHTML = `<div class="ok">No parts selected. The question will be treated as a single block with a thick divider at the end.</div>`;
-    return;
-  }
-
-  const struct = { noParts:false, parts: state.draft.parts };
-  const sum = totalMarksFromStructure(struct);
-
-  const qMarks = Number(el("qMarks").value || 0);
-  if(!qMarks){
-    status.innerHTML = `<div class="warn">Enter “# of marks” for the question so the structure can be validated.</div>`;
-    return;
-  }
-
-  if(state.draft.parts.length === 0){
-    status.innerHTML = `<div class="warn">Add at least one part (a–h), or tick 'This question does not have parts'.</div>`;
-    return;
-  }
-
-  if(sum !== qMarks){
-    status.innerHTML = `<div class="warn">Structure marks total <b>${sum}</b>, but question marks is <b>${qMarks}</b>. Adjust parts/subparts to match.</div>`;
-  }else{
-    status.innerHTML = `<div class="ok">Structure total matches the question total: <b>${qMarks}</b> marks.</div>`;
-  }
-}
-
+/** Question structure builder */
 function clearDraftParts(){
   state.draft.parts = [];
-  state.draft.editingPartIndex = null;
 
   el("partLabel").value = "a";
   el("partMarks").value = "1";
@@ -1669,53 +1528,6 @@ function clearDraftParts(){
   el("nextSubpart").checked = false;
 
   el("addOrSavePartBtn").textContent = "Add this part to draft";
-  el("cancelEditPartBtn").style.display = "none";
-
-  renderDraftPartsPreviewAndList();
-}
-
-function loadDraftPartForEditing(index){
-  const p = state.draft.parts[index];
-  if(!p) return;
-
-  state.draft.editingPartIndex = index;
-
-  el("partLabel").value = p.label;
-  if(!p.hasSubparts){
-    el("partMarks").value = String(p.marks);
-  }else{
-    el("partMarks").value = "1";
-  }
-
-  el("partHasSubparts").checked = !!p.hasSubparts;
-  el("subpartsBuilder").style.display = p.hasSubparts ? "block" : "none";
-
-  if(p.hasSubparts){
-    rebuildSubpartsUI((p.subparts ?? []).map(sp => ({ label: sp.label, marks: sp.marks })));
-  }else{
-    el("subpartsContainer").innerHTML = "";
-  }
-
-  el("addOrSavePartBtn").textContent = "Save changes";
-  el("cancelEditPartBtn").style.display = "inline-block";
-
-  renderDraftPartsPreviewAndList();
-}
-
-function cancelEditDraftPart(){
-  state.draft.editingPartIndex = null;
-
-  el("partLabel").value = "a";
-  el("partMarks").value = "1";
-  el("partHasSubparts").checked = false;
-  el("subpartsBuilder").style.display = "none";
-  el("subpartsContainer").innerHTML = "";
-  el("nextSubpart").checked = false;
-
-  el("addOrSavePartBtn").textContent = "Add this part to draft";
-  el("cancelEditPartBtn").style.display = "none";
-
-  renderDraftPartsPreviewAndList();
 }
 
 function addOrSaveDraftPart(){
@@ -1723,9 +1535,7 @@ function addOrSaveDraftPart(){
   const marks = Number(el("partMarks").value);
   const hasSubparts = el("partHasSubparts").checked;
 
-  const editingIdx = state.draft.editingPartIndex;
-
-  const duplicate = state.draft.parts.some((p, idx)=>p.label === label && idx !== editingIdx);
+  const duplicate = state.draft.parts.some(p=>p.label === label);
   if(duplicate){
     alert(`Part (${label}) already exists in the draft.`);
     return;
@@ -1744,28 +1554,18 @@ function addOrSaveDraftPart(){
     newPart = { label, marks:null, hasSubparts:true, subparts };
   }
 
-  if(editingIdx === null){
-    state.draft.parts.push(newPart);
-  }else{
-    state.draft.parts[editingIdx] = newPart;
-    state.draft.editingPartIndex = null;
-  }
+  state.draft.parts.push(newPart);
 
   el("addOrSavePartBtn").textContent = "Add this part to draft";
-  el("cancelEditPartBtn").style.display = "none";
 
   el("partHasSubparts").checked = false;
   el("subpartsBuilder").style.display = "none";
   el("subpartsContainer").innerHTML = "";
   el("nextSubpart").checked = false;
 
-  if(editingIdx === null){
-    const used = new Set(state.draft.parts.map(p=>p.label));
-    const next = partLabelOptions().find(x=>!used.has(x));
-    if(next) el("partLabel").value = next;
-  }
-
-  renderDraftPartsPreviewAndList();
+  const used = new Set(state.draft.parts.map(p=>p.label));
+  const next = partLabelOptions().find(x=>!used.has(x));
+  if(next) el("partLabel").value = next;
 }
 
 /** actions */
@@ -2651,7 +2451,6 @@ el("subpartsContainer").addEventListener("change", (e)=>{
 });
 
 el("addOrSavePartBtn").addEventListener("click", addOrSaveDraftPart);
-el("cancelEditPartBtn").addEventListener("click", cancelEditDraftPart);
 
 el("clearPartsBtn").addEventListener("click", clearDraftParts);
 
@@ -2683,9 +2482,6 @@ window.addEventListener("keydown", (e)=>{
     state.kbdAO = null;
   }
 });
-
-// keep validation current
-el("qMarks").addEventListener("input", renderDraftPartsPreviewAndList);
 
 // init
 initDropdowns();

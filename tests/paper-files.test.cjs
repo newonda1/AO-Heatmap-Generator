@@ -32,7 +32,6 @@ const script = fs.readFileSync(new URL('../index.html', `file://${__filename}`),
 vm.runInContext(script.slice(0, script.indexOf('// init')), context);
 vm.runInContext(`
   renderAll = ()=>{};
-  renderDraftPartsPreviewAndList = ()=>{};
   downloadJSONFile = (payload, name)=>downloads.push({payload, name});
   clearQuestionDraft();
 `, context);
@@ -116,3 +115,22 @@ assert.equal(dirty(), true);
 
 assert.ok(alerts.some(message => message.includes('in progress')));
 console.log('Paper file checks passed: save/import, draft and AO changes, cancel/discard, legacy files, invalid files, failed saves, and leave warnings.');
+
+run('closeReplacementDialog(); startNewBlankPaper(); finishPaperReplacement(false)');
+element('qNum').value = '1';
+element('qMarks').value = '3';
+element('qDesc').value = 'Parts example';
+element('partLabel').value = 'a';
+element('partMarks').value = '2';
+run('addOrSaveDraftPart(); addQuestion()');
+assert.equal(current().questions.length, 0, 'Mismatched structure is still rejected without the status area');
+element('partLabel').value = 'b';
+element('partMarks').value = '1';
+run('addOrSaveDraftPart(); addQuestion()');
+assert.equal(current().questions.length, 1);
+assert.equal(current().questions[0].structure.parts.length, 2);
+assert.equal(current().questions[0].segmentPlan.reduce((sum, part) => sum + part.marksCount, 0), 3);
+assert.equal(element('qNum').value, '');
+assert.equal(run('state.draft.parts.length'), 0, 'Adding a question clears its draft');
+assert.equal(dirty(), true, 'Added questions still require saving');
+console.log('Question builder checks passed: invalid structure rejected, valid parts retained, and draft cleared.');
