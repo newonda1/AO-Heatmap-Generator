@@ -47,6 +47,19 @@
       flex-direction:column;
       gap:20px;
     }
+    .right-column{
+      flex:1 1 520px;
+      min-width:360px;
+      display:flex;
+      flex-direction:column;
+      gap:20px;
+    }
+    .tag-editor-card{
+      background:#352f2a;
+      border-color:#88745c;
+      border-left:4px solid #f0c58a;
+      padding:18px;
+    }
     .setup-card{
       background:#1c2d46;
       border-color:#536e94;
@@ -70,7 +83,7 @@
       padding-top:0;
       border-top:none;
     }
-    .setup-card > h2, .question-card > h2, .paper-questions-card > h2{
+    .setup-card > h2, .question-card > h2, .paper-questions-card > h2, .tag-editor-card > h2{
       color:var(--text);
       font-size:18px;
       font-weight:750;
@@ -80,7 +93,6 @@
     .draft-parts .btn{ border-color:#517d83; }
     .draft-parts .btn[aria-pressed="true"]{ background:#28564f; border-color:#88ddd0; }
     .part-detail{ display:block; font-size:11px; color:var(--muted); margin-top:4px; }
-    .card.right{ flex: 1 1 520px; min-width:360px; }
 
     label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
     input, select, textarea{
@@ -345,6 +357,7 @@
 
   .card:not(#printArea),
   .left-column,
+  .right-column,
   h1,
   .muted:not(#paperMeta) {
     display: none !important;
@@ -534,17 +547,19 @@
         <p id="questionEditNotice" class="muted" style="display:none; margin-bottom:0;">Changing the structure clears AO tags from the first changed part or subpart onward. Earlier unchanged parts keep their tags.</p>
       </section>
 
+    </div>
+
+    <div class="right-column">
       <section class="card paper-questions-card" aria-labelledby="paperQuestionsHeading">
         <h2 id="paperQuestionsHeading">Paper Questions</h2>
         <div id="questionList" class="segList"></div>
       </section>
-    </div>
 
-    <div class="card right">
-      <h2>Editor</h2>
+    <section class="card tag-editor-card" aria-labelledby="tagEditorHeading">
+      <h2 id="tagEditorHeading">Question Tag Editor</h2>
 
       <div id="editorEmpty" class="muted">
-        Select a question on the left to tag marks.
+        Select a question in Paper Questions to tag marks.
       </div>
 
       <div id="editor" style="display:none;">
@@ -555,8 +570,6 @@
           </div>
           <button class="btn small danger" id="deleteQuestionBtn">Delete question</button>
         </div>
-
-        <div style="margin-top:12px;" class="hintBox" id="structureHint"></div>
 
         <div class="segList">
           <h2 style="margin:0;">Tag marks</h2>
@@ -582,9 +595,6 @@
             <button class="btn small" id="undoBtn">Undo</button>
           </div>
 
-          <div class="muted" style="margin-top:10px;">
-            Optional keyboard speed-up: <span class="kbd">S</span>/<span class="kbd">U</span>/<span class="kbd">I</span> then <span class="kbd">1</span>/<span class="kbd">2</span>/<span class="kbd">3</span>.
-          </div>
           <div class="muted" style="margin-top:8px;" id="editModeStatus">
             Click a tag in the preview to edit it individually.
           </div>
@@ -595,11 +605,12 @@
           </div>
 
           <div class="segList">
-            <div class="muted">Segments (auto-built from your structure):</div>
+            <div class="muted">Question parts</div>
             <div id="segmentPlanList"></div>
           </div>
         </div>
       </div>
+    </section>
     </div>
 
     <!-- WIDE CARD (SCREEN VIEW) -->
@@ -655,7 +666,6 @@ let state = {
   selectedQIndex: null,
   selectedMarkIndex: null,
   dragQuestionIndex: null,
-  kbdAO: null,
   draft: { parts: [], editingPartIndex: null },
   editingQuestion: null
 };
@@ -762,7 +772,6 @@ function loadSnapshotIntoState(snapshot){
   state.selectedQIndex = null;
   state.selectedMarkIndex = null;
   state.dragQuestionIndex = null;
-  state.kbdAO = null;
   state.draft.parts = [];
   clearQuestionDraft();
 }
@@ -1270,11 +1279,6 @@ function renderEditor(){
     el("currentSeg").textContent = seg.label ? seg.label : "(no parts)";
     el("remaining").textContent = String(remaining);
   }
-
-  const structureText = q.structure?.noParts
-    ? "Structure: no parts (single block)."
-    : "Structure: " + q.segmentPlan.map(s=>`${s.label || "(no parts)"}: ${s.marksCount}`).join(" • ");
-  el("structureHint").textContent = structureText;
 
   const strip = el("previewStrip");
   strip.innerHTML = "";
@@ -2590,20 +2594,6 @@ el("deleteQuestionBtn").addEventListener("click", deleteSelectedQuestion);
 el("exportExcelBtn").addEventListener("click", exportExcel);
 
 el("printBtn").addEventListener("click", ()=> window.print());
-
-window.addEventListener("keydown", (e)=>{
-  if(el("unsavedChangesDialog").open ||
-    e.target?.matches("input, select, textarea, [contenteditable='true']")) return;
-  const k = e.key.toLowerCase();
-  if(["s","u","i"].includes(k)){
-    state.kbdAO = k.toUpperCase();
-    return;
-  }
-  if(["1","2","3"].includes(k) && state.kbdAO){
-    tagMark(state.kbdAO, Number(k));
-    state.kbdAO = null;
-  }
-});
 
 // init
 initDropdowns();
