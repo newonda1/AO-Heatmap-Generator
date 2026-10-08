@@ -492,12 +492,12 @@
           <div id="draftPartButtons" class="draft-parts" role="group" aria-label="Added question parts"></div>
 
           <div style="margin-top:10px;">
-            <div class="grid2">
+            <div class="grid2" id="partFields">
               <div>
                 <label>Question part</label>
                 <select id="partLabel"></select>
               </div>
-              <div>
+              <div id="partMarksField">
                 <label>Marks for this part</label>
                 <select id="partMarks"></select>
               </div>
@@ -1102,7 +1102,7 @@ function renderAll(){
   el("paperTitle").value = state.paper.title ?? "";
   el("paperTotal").value = state.paper.totalMarks ?? 0;
   el("partsBuilder").style.display = el("qNoParts").checked ? "none" : "block";
-  el("subpartsBuilder").style.display = el("partHasSubparts").checked ? "block" : "none";
+  renderPartFields();
 
   renderDraftPartButtons();
   renderQuestionBuilderMode();
@@ -1561,13 +1561,20 @@ function renderDraftPartButtons(){
   el("cancelEditPartBtn").style.display = state.draft.editingPartIndex === null ? "none" : "";
 }
 
+function renderPartFields(){
+  const hasSubparts = el("partHasSubparts").checked;
+  el("partMarksField").style.display = hasSubparts ? "none" : "block";
+  el("partFields").style.gridTemplateColumns = hasSubparts ? "1fr" : "";
+  el("subpartsBuilder").style.display = hasSubparts ? "block" : "none";
+}
+
 function resetPartForm(){
   state.draft.editingPartIndex = null;
   const used = new Set(state.draft.parts.map(p=>p.label));
   el("partLabel").value = partLabelOptions().find(x=>!used.has(x)) || "a";
   el("partMarks").value = "1";
   el("partHasSubparts").checked = false;
-  el("subpartsBuilder").style.display = "none";
+  renderPartFields();
   el("subpartsContainer").innerHTML = "";
   el("nextSubpart").checked = false;
   renderDraftPartButtons();
@@ -1591,7 +1598,7 @@ function editDraftPart(index){
   el("partLabel").value = part.label;
   el("partMarks").value = String(part.marks || 1);
   el("partHasSubparts").checked = part.hasSubparts;
-  el("subpartsBuilder").style.display = part.hasSubparts ? "block" : "none";
+  renderPartFields();
   rebuildSubpartsUI(part.subparts || []);
   el("nextSubpart").checked = false;
   renderDraftPartButtons();
