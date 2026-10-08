@@ -40,7 +40,31 @@
       box-shadow: 0 8px 28px rgba(0,0,0,0.35);
     }
     .card.wide{ width:100%; }
-    .card.left{ flex: 1 1 420px; min-width:360px; }
+    .left-column{
+      flex:1 1 420px;
+      min-width:360px;
+      display:flex;
+      flex-direction:column;
+      gap:20px;
+    }
+    .setup-card{
+      background:#1c2d46;
+      border-color:#536e94;
+      border-left:4px solid #a4c4ff;
+      padding:18px;
+    }
+    .question-card{
+      background:#182f35;
+      border-color:#517d83;
+      border-left:4px solid #88ddd0;
+      padding:18px;
+    }
+    .setup-card > h2, .question-card > h2{
+      color:var(--text);
+      font-size:18px;
+      font-weight:750;
+      margin:0 0 14px;
+    }
     .card.right{ flex: 1 1 520px; min-width:360px; }
 
     label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
@@ -334,6 +358,7 @@
   }
 
   .card:not(#printArea),
+  .left-column,
   h1,
   .muted:not(#paperMeta) {
     display: none !important;
@@ -424,30 +449,33 @@
   <h1>AO Heatmap Generator</h1>
 
   <div class="row" style="margin-top:14px;">
-    <div class="card left">
-      <h2>Paper setup</h2>
-      <div class="grid">
-        <div>
-          <label for="paperTitle">Paper title</label>
-          <input id="paperTitle" placeholder="e.g., AA SL Paper 1 (May 2026)" />
+    <div class="left-column">
+      <section class="card setup-card" aria-labelledby="paperSetupHeading">
+        <h2 id="paperSetupHeading">Paper setup</h2>
+        <div class="grid">
+          <div>
+            <label for="paperTitle">Paper title</label>
+            <input id="paperTitle" placeholder="e.g., AA SL Paper 1 (May 2026)" />
+          </div>
+          <div>
+            <label for="paperTotal">Total marks (paper)</label>
+            <input id="paperTotal" type="number" min="0" value="0"/>
+          </div>
         </div>
-        <div>
-          <label for="paperTotal">Total marks (paper)</label>
-          <input id="paperTotal" type="number" min="0" value="0"/>
+        <div class="segList" style="margin-top:14px;">
+          <h2 style="margin:0;">Paper files</h2>
+          <div class="inline" style="margin-top:10px;">
+            <button class="btn small" id="exportPaperFileBtn">Save current paper to local file</button>
+            <button class="btn small" id="importPaperFileBtn">Load paper from file</button>
+            <button class="btn small" id="newPaperBtn">Start new blank paper</button>
+            <input id="importPaperFile" type="file" accept="application/json,.json" style="display:none;" />
+          </div>
         </div>
-      </div>
-      <div class="segList" style="margin-top:14px;">
-        <h2 style="margin:0;">Paper files</h2>
-        <div class="inline" style="margin-top:10px;">
-          <button class="btn small" id="exportPaperFileBtn">Save current paper to local file</button>
-          <button class="btn small" id="importPaperFileBtn">Load paper from file</button>
-          <button class="btn small" id="newPaperBtn">Start new blank paper</button>
-          <input id="importPaperFile" type="file" accept="application/json,.json" style="display:none;" />
-        </div>
-      </div>
 
-      <div class="segList" style="margin-top:14px;">
-        <h2 style="margin:0;">Add a question</h2>
+      </section>
+
+      <section class="card question-card" aria-labelledby="addQuestionHeading">
+        <h2 id="addQuestionHeading">Add a question</h2>
 
         <div class="grid3">
           <div>
@@ -532,7 +560,7 @@
         </div>
 
         <div id="questionList" class="segList"></div>
-      </div>
+      </section>
 
     </div>
 
