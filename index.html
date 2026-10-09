@@ -111,9 +111,9 @@
       grid-template-columns: 1fr 1fr;
       gap:10px;
     }
-    .grid3{
+    .question-fields{
       display:grid;
-      grid-template-columns: 0.6fr 0.8fr 2fr;
+      grid-template-columns: 0.8fr 2fr;
       gap:10px;
       align-items:end;
     }
@@ -288,9 +288,17 @@
       opacity:0.55;
       border-style:dashed;
     }
-    .segRow.drop-target{
-      outline:2px dashed rgba(168,230,163,0.85);
-      outline-offset:2px;
+    .question-drop-gap{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-shrink:0;
+      border:2px dashed #cfb9f3;
+      border-radius:12px;
+      background:rgba(207,185,243,0.12);
+      color:var(--text);
+      font-size:12px;
+      pointer-events:none;
     }
     .segRow .left{
       display:flex; flex-direction:column; gap:2px;
@@ -476,11 +484,7 @@
       <section class="card question-card" aria-labelledby="addQuestionHeading">
         <h2 id="addQuestionHeading">Add a question</h2>
 
-        <div class="grid3">
-          <div>
-            <label>Q#</label>
-            <input id="qNum" type="number" min="1" placeholder="1" />
-          </div>
+        <div class="question-fields">
           <div>
             <label># of marks</label>
             <input id="qMarks" type="number" min="1" placeholder="e.g., 12" />
@@ -674,13 +678,15 @@ const el = (id) => document.getElementById(id);
 let savedPaperSnapshot = JSON.stringify({ paper: state.paper, questions: state.questions });
 let pendingPaperReplacement = null;
 let replacementTrigger = null;
+let questionDropGap = null;
+let questionDropSlot = null;
 
 function paperSnapshotText(){
   return JSON.stringify({ paper: state.paper, questions: state.questions });
 }
 
 function hasQuestionDraft(){
-  return !!(el("qNum").value || el("qMarks").value || el("qDesc").value ||
+  return !!(el("qMarks").value || el("qDesc").value ||
     el("qNoParts").checked || state.draft.parts.length ||
     el("partHasSubparts").checked || el("partLabel").value !== "a" ||
     el("partMarks").value !== "1");
@@ -719,7 +725,6 @@ function finishPaperReplacement(saveFirst){
 function clearQuestionDraft(){
   state.editingQuestion = null;
   renderQuestionBuilderMode();
-  el("qNum").value = "";
   el("qMarks").value = "";
   el("qDesc").value = "";
   el("qNoParts").checked = false;
@@ -750,8 +755,8 @@ function normalizePaperSnapshot(snapshot){
   normalized.paper.title = normalized.paper.title ?? "";
   normalized.paper.totalMarks = Number(normalized.paper.totalMarks || 0);
 
-  normalized.questions.forEach(q=>{
-    q.qNum = Number(q.qNum || 0);
+  normalized.questions.forEach((q, index)=>{
+    q.qNum = index + 1;
     q.qMarks = Number(q.qMarks || 0);
     q.desc = q.desc ?? "";
     q.marks = Array.isArray(q.marks) ? q.marks : [];
@@ -776,6 +781,10 @@ function loadSnapshotIntoState(snapshot){
   clearQuestionDraft();
 }
 
+function renumberQuestions(){
+  state.questions.forEach((question, index)=>question.qNum = index + 1);
+}
+
 function moveQuestion(fromIndex, toIndex){
   if(fromIndex === toIndex) return;
   if(fromIndex === null || toIndex === null) return;
@@ -784,6 +793,7 @@ function moveQuestion(fromIndex, toIndex){
 
   const moved = state.questions.splice(fromIndex, 1)[0];
   state.questions.splice(toIndex, 0, moved);
+  renumberQuestions();
 
   if(state.selectedQIndex === fromIndex){
     state.selectedQIndex = toIndex;
@@ -799,10 +809,77 @@ function moveQuestion(fromIndex, toIndex){
   renderAll();
 }
 
-function handleQuestionDrop(targetIndex){
+function questionDropIndex(fromIndex, slot){
+  return slot > fromIndex ? slot - 1 : slot;
+}
+
+function clearQuestionDropPreview(){
+  questionDropGap?.remove();
+  questionDropGap = null;
+  questionDropSlot = null;
+}
+
+function showQuestionDropPreview(slot){
+  const fromIndex = state.dragQuestionIndex;
+  if(slot === fromIndex || slot === fromIndex + 1){
+    clearQuestionDropPreview();
+    return;
+  }
+  if(slot === questionDropSlot) return;
+  const wrap = el("questionList");
+  const rows = Array.from(wrap.querySelectorAll("[data-question-index]"));
+  const positions = rows.map(row=>row.getBoundingClientRect().top);
+  if(!questionDropGap){
+    questionDropGap = document.createElement("div");
+    questionDropGap.className = "question-drop-gap";
+    questionDropGap.style.height = `${rows[fromIndex].getBoundingClientRect().height}px`;
+  }
+  questionDropSlot = slot;
+  questionDropGap.textContent = `Drop here — becomes Q${questionDropIndex(fromIndex, slot) + 1}`;
+  wrap.insertBefore(questionDropGap, rows[slot] || null);
+  if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+    rows.forEach((row, index)=>{
+      const shift = positions[index] - row.getBoundingClientRect().top;
+      if(shift && row.animate){
+        row.getAnimations().forEach(animation=>animation.cancel());
+        row.animate([{ transform:`translateY(${shift}px)` }, { transform:"translateY(0)" }],
+          { duration:180, easing:"ease-out" });
+      }
+    });
+  }
+}
+
+function updateQuestionDropPreview(event){
   if(state.dragQuestionIndex === null) return;
-  moveQuestion(state.dragQuestionIndex, targetIndex);
+  event.preventDefault();
+  if(event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  // Keep the target stable while the pointer is inside the newly opened gap.
+  if(questionDropGap){
+    const gap = questionDropGap.getBoundingClientRect();
+    if(event.clientY >= gap.top && event.clientY <= gap.bottom) return;
+  }
+  const rows = el("questionList").querySelectorAll("[data-question-index]");
+  let slot = state.questions.length;
+  for(const row of rows){
+    const index = Number(row.dataset.questionIndex);
+    if(index === state.dragQuestionIndex) continue;
+    const bounds = row.getBoundingClientRect();
+    if(event.clientY < bounds.top + bounds.height / 2){
+      slot = index;
+      break;
+    }
+  }
+  showQuestionDropPreview(slot);
+}
+
+function handleQuestionDrop(event){
+  if(state.dragQuestionIndex === null) return;
+  event.preventDefault();
+  const fromIndex = state.dragQuestionIndex;
+  const slot = questionDropSlot;
+  clearQuestionDropPreview();
   state.dragQuestionIndex = null;
+  if(slot !== null) moveQuestion(fromIndex, questionDropIndex(fromIndex, slot));
 }
 
 function startNewBlankPaper(){
@@ -1222,24 +1299,7 @@ function renderQuestionList(){
     row.addEventListener("dragend", ()=>{
       state.dragQuestionIndex = null;
       row.classList.remove("dragging");
-      wrap.querySelectorAll(".segRow").forEach(r => r.classList.remove("drop-target"));
-    });
-
-    row.addEventListener("dragover", (e)=>{
-      e.preventDefault();
-      if(state.dragQuestionIndex === null || state.dragQuestionIndex === idx) return;
-      row.classList.add("drop-target");
-      if(e.dataTransfer) e.dataTransfer.dropEffect = "move";
-    });
-
-    row.addEventListener("dragleave", ()=>{
-      row.classList.remove("drop-target");
-    });
-
-    row.addEventListener("drop", (e)=>{
-      e.preventDefault();
-      row.classList.remove("drop-target");
-      handleQuestionDrop(idx);
+      clearQuestionDropPreview();
     });
 
     wrap.appendChild(row);
@@ -1659,7 +1719,6 @@ function editQuestion(question){
   state.editingQuestion = question;
   state.selectedQIndex = state.questions.indexOf(question);
   state.selectedMarkIndex = null;
-  el("qNum").value = String(question.qNum);
   el("qMarks").value = String(question.qMarks);
   el("qDesc").value = question.desc;
   el("qNoParts").checked = !!question.structure.noParts;
@@ -1667,7 +1726,7 @@ function editQuestion(question){
   resetPartForm();
   renderAll();
   el("addQuestionHeading").scrollIntoView({ block:"start", behavior:"smooth" });
-  el("qNum").focus({ preventScroll:true });
+  el("qMarks").focus({ preventScroll:true });
 }
 
 // Tags are stored in order. Keep the unchanged prefix so later tags never
@@ -1689,24 +1748,14 @@ function addQuestion(){
     alert("Save or cancel the selected part edit before saving the question.");
     return;
   }
-  const qNum = Number(el("qNum").value);
   const qMarks = Number(el("qMarks").value);
   const desc = el("qDesc").value.trim();
   const noParts = el("qNoParts").checked;
 
-  if(!qNum || qNum < 1){
-    alert("Please enter a valid question number.");
-    return;
-  }
   if(!qMarks || qMarks < 1){
     alert("Please enter a valid # of marks for the question.");
     return;
   }
-  if(state.questions.some(q=>q.qNum === qNum && q !== state.editingQuestion)){
-    alert(`Question ${qNum} already exists.`);
-    return;
-  }
-
   let structure = { noParts: !!noParts, parts: [] };
 
   if(noParts){
@@ -1731,7 +1780,7 @@ function addQuestion(){
   }
 
   const newQ = {
-    qNum,
+    qNum: state.editingQuestion ? state.editingQuestion.qNum : state.questions.length + 1,
     qMarks,
     desc,
     highlight: false,
@@ -1751,6 +1800,7 @@ function addQuestion(){
   }else{
     state.questions.push(newQ);
   }
+  renumberQuestions();
   state.selectedQIndex = state.questions.indexOf(newQ);
   state.selectedMarkIndex = null;
 
@@ -1765,6 +1815,7 @@ function tagMark(ao, level){
   if(state.selectedMarkIndex !== null && q.marks[state.selectedMarkIndex]){
     q.marks[state.selectedMarkIndex].ao = ao;
     q.marks[state.selectedMarkIndex].level = level;
+    state.selectedMarkIndex = null;
     renderAll();
     return;
   }
@@ -1834,6 +1885,7 @@ function deleteSelectedQuestion(){
 
   if(state.editingQuestion === q) clearQuestionDraft();
   state.questions.splice(state.selectedQIndex, 1);
+  renumberQuestions();
   state.selectedQIndex = null;
   state.selectedMarkIndex = null;
   renderAll();
@@ -2508,6 +2560,12 @@ function downloadJSONFile(payload, fileName){
 }
 
 /** events */
+el("questionList").addEventListener("dragenter", updateQuestionDropPreview);
+el("questionList").addEventListener("dragover", updateQuestionDropPreview);
+el("questionList").addEventListener("drop", handleQuestionDrop);
+el("questionList").addEventListener("dragleave", (event)=>{
+  if(!el("questionList").contains(event.relatedTarget)) clearQuestionDropPreview();
+});
 el("addQuestionBtn").addEventListener("click", addQuestion);
 el("newPaperBtn").addEventListener("click", startNewBlankPaper);
 el("exportPaperFileBtn").addEventListener("click", exportCurrentPaperFile);

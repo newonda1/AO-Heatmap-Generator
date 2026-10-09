@@ -20,7 +20,7 @@ const element = id => {
 };
 const context = vm.createContext({
   console, Blob, TextEncoder, setTimeout,
-  alert: message => alerts.push(message),
+  alert: message => alerts.push(message), confirm: ()=>true,
   document: { createElement: makeElement, getElementById: element, querySelectorAll: () => [], activeElement: null },
   window: { addEventListener: (name, handler) => handlers.set(name, handler) },
   FileReader: class {
@@ -121,7 +121,6 @@ assert.ok(alerts.some(message => message.includes('in progress')));
 console.log('Paper file checks passed: save/import, draft and AO changes, cancel/discard, legacy files, invalid files, failed saves, and leave warnings.');
 
 run('closeReplacementDialog(); startNewBlankPaper(); finishPaperReplacement(false)');
-element('qNum').value = '1';
 element('qMarks').value = '3';
 element('qDesc').value = 'Parts example';
 element('partLabel').value = 'a';
@@ -134,13 +133,11 @@ run('addOrSaveDraftPart(); addQuestion()');
 assert.equal(current().questions.length, 1);
 assert.equal(current().questions[0].structure.parts.length, 2);
 assert.equal(current().questions[0].segmentPlan.reduce((sum, part) => sum + part.marksCount, 0), 3);
-assert.equal(element('qNum').value, '');
 assert.equal(run('state.draft.parts.length'), 0, 'Adding a question clears its draft');
 assert.equal(dirty(), true, 'Added questions still require saving');
 console.log('Question builder checks passed: invalid structure rejected, valid parts retained, and draft cleared.');
 
 run('clearQuestionDraft(); rebuildSubpartsUI = ()=>{};');
-element('qNum').value = '2';
 element('qMarks').value = '6';
 run('addOrSaveDraftPart()');
 assert.equal(element('qNoPartsOption').style.display, 'none');
@@ -193,7 +190,6 @@ assert.equal(run('retainedTagsForEdit(oldQuestion, newQuestion).length'), 2);
 console.log('Part editing checks passed: chips, hidden no-parts option, duplicate guard, cancel, existing questions, and safe AO tag retention.');
 
 run('clearQuestionDraft()');
-element('qNum').value = '3';
 element('qMarks').value = '9';
 for (const marks of ['4', '4', '1']) {
   element('partMarks').value = marks;
@@ -216,7 +212,6 @@ element('qMarks').value = '10';
 run('renderPartEntryAvailability()');
 assert.equal(element('partEntryFields').style.display, 'block');
 run('clearQuestionDraft()');
-element('qNum').value = '3';
 element('qMarks').value = '13';
 for (let i = 0; i < 13; i++) run('addOrSaveDraftPart()');
 assert.equal(run('state.draft.parts[12].label'), 'm');
@@ -228,3 +223,71 @@ run('editQuestion(state.questions[2]); editDraftPart(12)');
 assert.equal(element('partLabel').value, 'm', 'Part m reopens for editing');
 assert.equal(element('partEntryFields').style.display, 'block');
 console.log('Part allocation checks passed: total reached, edit/reopen, changed totals, and parts a through m.');
+
+run('clearQuestionDraft(); state.selectedQIndex = 0; state.selectedMarkIndex = null; tagMark("S", 1); state.selectedMarkIndex = 0; tagMark("U", 3)');
+assert.equal(run('state.selectedMarkIndex'), null, 'Replacing a tag automatically exits editing');
+assert.equal(current().questions[0].marks[0].ao, 'U');
+assert.equal(current().questions[0].marks[0].level, 3);
+const originalLast = current().questions.at(-1);
+run('state.selectedQIndex = state.questions.length - 1; moveQuestion(state.questions.length - 1, 0)');
+assert.equal(current().questions[0].desc, originalLast.desc);
+assert.deepEqual(current().questions.map(q => q.qNum), [1, 2, 3]);
+assert.deepEqual(current().questions[0].marks, originalLast.marks, 'Reordering keeps the question tags');
+assert.equal(run('state.selectedQIndex'), 0, 'Selected editor follows the moved question');
+run('moveQuestion(0, 2)');
+assert.deepEqual(current().questions.map(q => q.qNum), [1, 2, 3]);
+run('state.selectedQIndex = 1; deleteSelectedQuestion()');
+assert.deepEqual(current().questions.map(q => q.qNum), [1, 2], 'Deletion closes numbering gaps');
+context.legacyNumbering = { paper: {title:'Legacy order',totalMarks:6}, questions: [
+  {...sample.questions[0], qNum: 12, desc:'First'},
+  {...sample.questions[0], qNum: 3, desc:'Second'},
+  {...sample.questions[0], qNum: 12, desc:'Third'}
+]};
+run('loadSnapshotIntoState(legacyNumbering)');
+assert.deepEqual(current().questions.map(q => q.qNum), [1, 2, 3], 'Imported numbering follows file order');
+assert.deepEqual(current().questions.map(q => q.desc), ['First', 'Second', 'Third']);
+for (const [from, slot, result] of [[2,0,0], [0,3,2], [0,2,1], [2,1,1]]) {
+  assert.equal(run(`questionDropIndex(${from}, ${slot})`), result);
+}
+
+// Exercise the actual preview and drop handlers with a layout-aware DOM stub.
+const dragWrap = element('questionList');
+dragWrap.children = [];
+const animations = [];
+const dragNode = () => Object.assign(makeElement(), {
+  remove() { if(this.parent) this.parent.children.splice(this.parent.children.indexOf(this), 1); this.parent = null; },
+  getBoundingClientRect() {
+    const siblings = this.parent?.children || [];
+    const index = siblings.indexOf(this);
+    const top = siblings.slice(0, Math.max(0,index)).reduce((sum,node) => sum + (parseFloat(node.style.height) || 60) + 8, 0);
+    const height = parseFloat(this.style.height) || 60;
+    return {top, bottom:top+height, height};
+  },
+  getAnimations() { return []; },
+  animate(frames, options) { animations.push({frames,options}); }
+});
+for (let i=0;i<3;i++) { const row=dragNode(); row.dataset.questionIndex=String(i); row.parent=dragWrap; dragWrap.children.push(row); }
+dragWrap.querySelectorAll = () => dragWrap.children.filter(node=>node.dataset.questionIndex !== undefined);
+dragWrap.insertBefore = (node,before) => { node.remove(); const index=before ? dragWrap.children.indexOf(before) : dragWrap.children.length; dragWrap.children.splice(index,0,node); node.parent=dragWrap; };
+context.document.createElement = dragNode;
+context.window.matchMedia = () => ({matches:false});
+run('state.dragQuestionIndex = 2; showQuestionDropPreview(0)');
+assert.equal(run('questionDropSlot'), 0);
+assert.equal(run('questionDropGap.textContent'), 'Drop here — becomes Q1');
+assert.equal(dragWrap.children[0].className, 'question-drop-gap');
+assert.equal(run('questionDropGap.style.height'), '60px');
+assert.ok(animations.length > 0, 'Rows animate apart when the gap opens');
+context.dragEvent = {clientY:30, preventDefault(){}, dataTransfer:{}};
+run('updateQuestionDropPreview(dragEvent)');
+assert.equal(run('questionDropSlot'), 0, 'Pointer inside gap keeps the target stable');
+run('handleQuestionDrop(dragEvent)');
+assert.deepEqual(current().questions.map(q=>q.desc), ['Third','First','Second']);
+assert.deepEqual(current().questions.map(q=>q.qNum), [1,2,3]);
+assert.equal(run('questionDropGap'), null, 'Drop removes the preview');
+run('state.dragQuestionIndex = 0; showQuestionDropPreview(3)');
+assert.equal(run('questionDropGap.textContent'), 'Drop here — becomes Q3');
+run('handleQuestionDrop(dragEvent)');
+assert.deepEqual(current().questions.map(q=>q.desc), ['First','Second','Third']);
+run('state.dragQuestionIndex = 0; showQuestionDropPreview(0)');
+assert.equal(run('questionDropGap'), null, 'Dropping in place does not open a misleading gap');
+console.log('Tag and reorder checks passed: automatic edit exit, numbered order on add/move/delete/import, stable animated gap, and upward/downward drop positions.');
