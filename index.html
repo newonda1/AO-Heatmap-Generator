@@ -39,7 +39,33 @@
       padding:14px;
       box-shadow: 0 8px 28px rgba(0,0,0,0.35);
     }
-    .card.wide{ width:100%; }
+    .report-sections{
+      flex-basis:100%;
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:20px;
+    }
+    .report-card{ width:fit-content; max-width:100%; min-width:0; padding:18px; }
+    .heat-map-card{
+      max-width:min(100%,960px);
+      background:#1c3040;
+      border-color:#587e94;
+      border-left:4px solid #91d0f0;
+    }
+    .matrix-card{
+      max-width:min(100%,720px);
+      background:#293329;
+      border-color:#65866a;
+      border-left:4px solid #b5dea2;
+    }
+    .report-card h2{ color:var(--text); font-size:18px; font-weight:750; }
+    .report-card table{ width:auto; }
+    .table-scroll{ max-width:100%; overflow-x:auto; margin-top:10px; }
+    #heatTable td.desc{ width:320px; max-width:320px; overflow-wrap:anywhere; }
+    #paperMeta{ max-width:460px; }
+    .print-only{ display:none; }
     .left-column{
       flex:1 1 420px;
       min-width:360px;
@@ -363,7 +389,7 @@
     margin: 0 !important;
   }
 
-  .card:not(#printArea),
+  .card:not(.report-card),
   .left-column,
   .right-column,
   h1,
@@ -374,6 +400,7 @@
   #printArea {
     display: block !important;
     width: 100% !important;
+    max-width: none !important;
     border: none !important;
     box-shadow: none !important;
     background: transparent !important;
@@ -381,6 +408,21 @@
     margin: 0 !important;
     border-radius: 0 !important;
   }
+
+  #printArea .report-card {
+    display:block !important;
+    width:100% !important;
+    max-width:none !important;
+    border:none !important;
+    box-shadow:none !important;
+    background:transparent !important;
+    padding:0 !important;
+    margin:0 0 18px !important;
+  }
+
+  .print-only{ display:block !important; }
+  .noPrint{ display:none !important; }
+  #printArea .table-scroll{ overflow:visible !important; }
 
   #printArea h2 {
     color: #000 !important;
@@ -617,37 +659,33 @@
     </section>
     </div>
 
-    <!-- WIDE CARD (SCREEN VIEW) -->
-    <div class="card wide" id="printArea">
-      <div class="footerRow noPrint">
-        <div>
-          <h2 style="margin:0 0 6px 0;">Heat map</h2>
-          <div class="muted" id="paperMeta">—</div>
-        </div>
-        <div class="inline">
-          <button class="btn small" id="exportExcelBtn">Export Excel</button>
-          <button class="btn small" id="printBtn">Print / Save as PDF</button>
-        </div>
-      </div>
-
-      <!-- PRINT AREA (this is what prints) -->
-      <div id="printContent">
-        <div style="margin-bottom:10px;">
-          <h2 style="margin:0 0 6px 0; color:#000;" class="printTitle">Heat map</h2>
-          <div id="paperMetaPrint"></div>
-        </div>
-
-        <div style="margin-top:10px; overflow:auto;">
-          <table id="heatTable"></table>
-        </div>
-
-        <div style="margin-top:18px;">
-          <h2 style="margin:0 0 10px 0;" id="matrixHeading">AO Matrix</h2>
-          <div style="overflow:auto;">
-            <table id="matrixTable"></table>
+    <div class="report-sections" id="printArea">
+      <section class="card report-card heat-map-card" aria-labelledby="heatMapHeading">
+        <div class="footerRow noPrint">
+          <div>
+            <h2 id="heatMapHeading" style="margin:0 0 6px;">Heat Map</h2>
+            <div class="muted" id="paperMeta">—</div>
+          </div>
+          <div class="inline">
+            <button class="btn small" id="exportExcelBtn">Export Excel</button>
+            <button class="btn small" id="printBtn">Print / Save as PDF</button>
           </div>
         </div>
-      </div>
+        <div class="print-only" style="margin-bottom:10px;">
+          <h2>Heat Map</h2>
+          <div id="paperMetaPrint"></div>
+        </div>
+        <div class="table-scroll">
+          <table id="heatTable"></table>
+        </div>
+      </section>
+
+      <section class="card report-card matrix-card" aria-labelledby="matrixHeading">
+        <h2 id="matrixHeading">AO Matrix</h2>
+        <div class="table-scroll">
+          <table id="matrixTable"></table>
+        </div>
+      </section>
     </div>
   </div>
 
