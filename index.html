@@ -41,12 +41,16 @@
     }
     .report-sections{
       flex-basis:100%;
+      max-width:1040px;
       min-width:0;
       display:flex;
       flex-direction:column;
       align-items:flex-start;
       gap:20px;
+      padding:18px;
+      border-color:#65748b;
     }
+    .report-sections > h2{ margin:0; color:var(--text); font-size:20px; font-weight:750; }
     .report-card{ width:fit-content; max-width:100%; min-width:0; padding:18px; }
     .heat-map-card{
       max-width:min(100%,960px);
@@ -62,6 +66,8 @@
     }
     .report-card h2{ color:var(--text); font-size:18px; font-weight:750; }
     .report-card table{ width:auto; }
+    #matrixTable td:first-child{ text-align:center; }
+    #matrixTable td.L1, #matrixTable td.L2, #matrixTable td.L3{ color:#111; }
     .table-scroll{ max-width:100%; overflow-x:auto; margin-top:10px; }
     #heatTable td.desc{ width:320px; max-width:320px; overflow-wrap:anywhere; }
     #paperMeta{ max-width:460px; }
@@ -389,7 +395,7 @@
     margin: 0 !important;
   }
 
-  .card:not(.report-card),
+  .card:not(.report-card):not(#printArea),
   .left-column,
   .right-column,
   h1,
@@ -659,7 +665,8 @@
     </section>
     </div>
 
-    <div class="report-sections" id="printArea">
+    <section class="card report-sections" id="printArea" aria-labelledby="paperReportsHeading">
+      <h2 class="noPrint" id="paperReportsHeading">Paper Reports</h2>
       <section class="card report-card heat-map-card" aria-labelledby="heatMapHeading">
         <div class="footerRow noPrint">
           <div>
@@ -686,7 +693,7 @@
           <table id="matrixTable"></table>
         </div>
       </section>
-    </div>
+    </section>
   </div>
 
 <dialog id="unsavedChangesDialog" aria-labelledby="unsavedChangesTitle" aria-describedby="unsavedChangesMessage">
@@ -1534,13 +1541,13 @@ function renderMatrixTable(){
   rows.forEach(([label, key])=>{
     const tr = document.createElement("tr");
     const td0 = document.createElement("td");
-    td0.style.textAlign = "left";
     td0.style.fontWeight = "900";
     td0.textContent = label;
     tr.appendChild(td0);
 
     [1,2,3].forEach(lvl=>{
       const td = document.createElement("td");
+      td.className = `L${lvl}`;
       td.textContent = counts[key][lvl];
       tr.appendChild(td);
     });
@@ -1560,13 +1567,13 @@ function renderMatrixTable(){
   // totals row
   const trTot = document.createElement("tr");
   const tdLabel = document.createElement("td");
-  tdLabel.style.textAlign = "left";
   tdLabel.style.fontWeight = "900";
   tdLabel.textContent = "Total";
   trTot.appendChild(tdLabel);
 
   [1,2,3].forEach(lvl=>{
     const td = document.createElement("td");
+    td.className = `L${lvl}`;
     td.style.fontWeight = "900";
     td.textContent = counts.total[lvl];
     trTot.appendChild(td);
@@ -1585,13 +1592,13 @@ function renderMatrixTable(){
   // NEW: percent-by-level row
   const trLvlPct = document.createElement("tr");
   const tdLvlLabel = document.createElement("td");
-  tdLvlLabel.style.textAlign = "left";
   tdLvlLabel.style.fontWeight = "900";
   tdLvlLabel.textContent = "% by level";
   trLvlPct.appendChild(tdLvlLabel);
 
   [1,2,3].forEach(lvl=>{
     const td = document.createElement("td");
+    td.className = `L${lvl}`;
     td.style.fontWeight = "900";
     td.textContent = pct(counts.total[lvl], totalTagged);
     trLvlPct.appendChild(td);
