@@ -45,7 +45,8 @@
       min-width:0;
       display:flex;
       flex-direction:column;
-      align-items:flex-start;
+      align-items:center;
+      margin-inline:auto;
       gap:20px;
       padding:18px;
       border-color:#65748b;
@@ -65,12 +66,11 @@
       border-left:4px solid #b5dea2;
     }
     .report-card h2{ color:var(--text); font-size:18px; font-weight:750; }
-    .report-card table{ width:auto; }
+    .report-card table{ width:auto; background:rgba(255,255,255,0.07); }
     #matrixTable td:first-child{ text-align:center; }
     #matrixTable td.L1, #matrixTable td.L2, #matrixTable td.L3{ color:#111; }
     .table-scroll{ max-width:100%; overflow-x:auto; margin-top:10px; }
     #heatTable td.desc{ width:320px; max-width:320px; overflow-wrap:anywhere; }
-    #paperMeta{ max-width:460px; }
     .print-only{ display:none; }
     .left-column{
       flex:1 1 420px;
@@ -399,7 +399,7 @@
   .left-column,
   .right-column,
   h1,
-  .muted:not(#paperMeta) {
+  .muted {
     display: none !important;
   }
 
@@ -443,15 +443,9 @@
     display: none !important;
   }
 
-  #paperMeta {
-    color: #000 !important;
-    text-align: center !important;
-    font-size: 12px !important;
-    margin-bottom: 10px !important;
-  }
-
   #heatTable, #matrixTable {
     width: 95% !important;
+    background:#fff !important;
     margin: 0 auto !important;
     border-collapse: collapse !important;
   }
@@ -671,7 +665,6 @@
         <div class="footerRow noPrint">
           <div>
             <h2 id="heatMapHeading" style="margin:0 0 6px;">Heat Map</h2>
-            <div class="muted" id="paperMeta">—</div>
           </div>
           <div class="inline">
             <button class="btn small" id="exportExcelBtn">Export Excel</button>
@@ -1243,7 +1236,6 @@ function renderAll(){
 
   const metaText = paperMetaText();
 
-  el("paperMeta").textContent = metaText;
 
   const metaPrint = el("paperMetaPrint");
   if(metaPrint) metaPrint.textContent = metaText;
